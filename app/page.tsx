@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Camera, Search, Upload, Zap, TrendingUp, Users } from 'lucide-react'
+import { Camera, Search, Upload, Zap, TrendingUp, Users, DollarSign, Sparkles, Grid3x3 } from 'lucide-react'
 
 export default function Home() {
   return (
@@ -31,7 +31,7 @@ export default function Home() {
                 href="/auth/signup"
                 className="px-6 py-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full hover:from-purple-600 hover:to-blue-600 transition"
               >
-                Get Started
+                Start Earning
               </Link>
             </div>
           </div>
@@ -40,17 +40,40 @@ export default function Home() {
         {/* Hero Content */}
         <div className="relative z-10 container mx-auto px-6 py-20 md:py-32">
           <div className="max-w-4xl mx-auto text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full mb-8">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span className="text-sm text-purple-300">The Uber for Event Content</span>
+            </div>
+
             <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-              Your Event,
+              Upload. Discover.
               <br />
               <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-                Everyone's Content
+                Earn Together.
               </span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-2xl mx-auto">
-              Upload. Discover. Download. The collaborative content marketplace for events.
-              AI-powered tagging makes finding the perfect shot instant.
+            <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-2xl mx-auto">
+              The first peer-to-peer marketplace for event content. 
+              Upload your photos, download others', earn 50% revenue share.
             </p>
+            
+            {/* Value Props */}
+            <div className="flex flex-wrap justify-center gap-4 mb-12 text-sm md:text-base">
+              <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full">
+                <DollarSign className="w-4 h-4 text-green-400" />
+                <span>Earn from uploads</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full">
+                <Zap className="w-4 h-4 text-yellow-400" />
+                <span>AI-powered search</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full">
+                <Users className="w-4 h-4 text-blue-400" />
+                <span>No photographer needed</span>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 href="/events"
@@ -69,6 +92,62 @@ export default function Home() {
         </div>
       </div>
 
+      {/* P2P Explainer */}
+      <div className="container mx-auto px-6 py-20">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full mb-4">
+              <span className="text-purple-300 font-semibold">Creator Economy for Events</span>
+            </div>
+            <h2 className="text-4xl font-bold mb-6">
+              Everyone's a Supplier.
+              <br />
+              Everyone's a Customer.
+            </h2>
+            <p className="text-xl text-gray-400">
+              Unlike traditional photo sharing (free but scattered) or pro photographers (expensive but limited), 
+              Aura creates a <strong className="text-white">peer-to-peer marketplace</strong> where attendees upload, 
+              discover, and monetize their content together.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Grid3x3 className="w-8 h-8 text-purple-400" />
+              </div>
+              <h3 className="text-lg font-bold mb-2">Old Way: Free Sharing</h3>
+              <p className="text-gray-400 text-sm">
+                Content scattered across Google Photos, WhatsApp groups. Hard to find, no incentive to upload.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Camera className="w-8 h-8 text-blue-400" />
+              </div>
+              <h3 className="text-lg font-bold mb-2">Old Way: Pro Photographers</h3>
+              <p className="text-gray-400 text-sm">
+                Expensive. Limited angles. Only one perspective. You pay hundreds for a few shots.
+              </p>
+            </div>
+
+            <div className="text-center relative">
+              <div className="absolute -top-3 -right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-xs font-bold">
+                NEW
+              </div>
+              <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-pink-400" />
+              </div>
+              <h3 className="text-lg font-bold mb-2">Aura: P2P Marketplace</h3>
+              <p className="text-gray-400 text-sm">
+                Everyone uploads. AI tags everything. Pay only for what you need. Uploaders earn 50%.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* How It Works */}
       <div className="container mx-auto px-6 py-20">
         <h2 className="text-4xl font-bold text-center mb-16">How It Works</h2>
@@ -77,58 +156,70 @@ export default function Home() {
             <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mb-6">
               <Upload className="w-8 h-8 text-purple-400" />
             </div>
-            <h3 className="text-2xl font-bold mb-4">Upload</h3>
-            <p className="text-gray-400">
-              Join an event and upload your photos & videos. AI automatically tags everything.
+            <h3 className="text-2xl font-bold mb-4">1. Upload & Earn</h3>
+            <p className="text-gray-400 mb-4">
+              Attended an event? Upload your best shots. AI auto-tags faces, moments, locations.
             </p>
+            <div className="flex items-center gap-2 text-green-400 font-semibold">
+              <DollarSign className="w-5 h-5" />
+              Earn 50% per download
+            </div>
           </div>
 
           <div className="bg-gradient-to-br from-blue-900/20 to-transparent border border-blue-500/20 rounded-2xl p-8 hover:border-blue-500/40 transition">
             <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-6">
               <Search className="w-8 h-8 text-blue-400" />
             </div>
-            <h3 className="text-2xl font-bold mb-4">Discover</h3>
-            <p className="text-gray-400">
-              Search by person, moment, or vibe. Find the perfect shot from hundreds of uploads.
+            <h3 className="text-2xl font-bold mb-4">2. Discover Instantly</h3>
+            <p className="text-gray-400 mb-4">
+              Search by person, moment, or vibe. Find yourself in hundreds of uploads. Preview free.
             </p>
+            <div className="flex items-center gap-2 text-blue-400 font-semibold">
+              <Zap className="w-5 h-5" />
+              AI-powered search
+            </div>
           </div>
 
           <div className="bg-gradient-to-br from-pink-900/20 to-transparent border border-pink-500/20 rounded-2xl p-8 hover:border-pink-500/40 transition">
             <div className="w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center mb-6">
               <Camera className="w-8 h-8 text-pink-400" />
             </div>
-            <h3 className="text-2xl font-bold mb-4">Download</h3>
-            <p className="text-gray-400">
-              Preview free. Pay to download high-res. Uploaders earn 50% revenue share.
+            <h3 className="text-2xl font-bold mb-4">3. Pay & Download</h3>
+            <p className="text-gray-400 mb-4">
+              Found the perfect shot? Pay ₹10-50 for photos, ₹100-500 for videos. Support fellow creators.
             </p>
+            <div className="flex items-center gap-2 text-pink-400 font-semibold">
+              <TrendingUp className="w-5 h-5" />
+              Support creators
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Features */}
+      {/* Why Different */}
       <div className="container mx-auto px-6 py-20">
-        <h2 className="text-4xl font-bold text-center mb-16">Why Creators Love Aura</h2>
+        <h2 className="text-4xl font-bold text-center mb-16">Why Aura is Different</h2>
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <div className="flex gap-4">
             <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Zap className="w-6 h-6 text-purple-400" />
+              <DollarSign className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h3 className="text-xl font-bold mb-2">AI-Powered Search</h3>
+              <h3 className="text-xl font-bold mb-2">Earn from Your Uploads</h3>
               <p className="text-gray-400">
-                Find anyone, anything, any moment instantly with smart tagging.
+                50% revenue share. Turn event photos into passive income. The more you upload, the more you earn.
               </p>
             </div>
           </div>
 
           <div className="flex gap-4">
             <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-6 h-6 text-blue-400" />
+              <Zap className="w-6 h-6 text-blue-400" />
             </div>
             <div>
-              <h3 className="text-xl font-bold mb-2">Earn from Uploads</h3>
+              <h3 className="text-xl font-bold mb-2">AI-Powered Discovery</h3>
               <p className="text-gray-400">
-                50% revenue share. Turn your event content into passive income.
+                Find anyone, anything, any moment instantly. No manual tagging. No endless scrolling.
               </p>
             </div>
           </div>
@@ -138,9 +229,9 @@ export default function Home() {
               <Users className="w-6 h-6 text-pink-400" />
             </div>
             <div>
-              <h3 className="text-xl font-bold mb-2">Collaborative Pool</h3>
+              <h3 className="text-xl font-bold mb-2">No Photographer Needed</h3>
               <p className="text-gray-400">
-                Everyone uploads, everyone benefits. No more scattered content.
+                Democratized content. Everyone contributes. Get 100x more angles than a single photographer.
               </p>
             </div>
           </div>
@@ -150,10 +241,36 @@ export default function Home() {
               <Camera className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h3 className="text-xl font-bold mb-2">Premium Quality</h3>
+              <h3 className="text-xl font-bold mb-2">Pay Only for What You Need</h3>
               <p className="text-gray-400">
-                Watermarked previews. Full-res downloads. Professional-grade assets.
+                Not bundled packages. Download 1 photo or 100. Watermarked previews. Full-res downloads.
               </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="container mx-auto px-6 py-20">
+        <div className="max-w-4xl mx-auto bg-gradient-to-r from-purple-900/40 to-blue-900/40 backdrop-blur-sm border border-white/10 rounded-3xl p-12">
+          <div className="grid md:grid-cols-3 gap-8 text-center">
+            <div>
+              <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+                50%
+              </div>
+              <p className="text-gray-300">Revenue Share</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
+                ₹10-500
+              </div>
+              <p className="text-gray-300">Per Download</p>
+            </div>
+            <div>
+              <div className="text-4xl font-bold bg-gradient-to-r from-pink-400 to-blue-400 bg-clip-text text-transparent mb-2">
+                100x
+              </div>
+              <p className="text-gray-300">More Perspectives</p>
             </div>
           </div>
         </div>
@@ -162,16 +279,19 @@ export default function Home() {
       {/* CTA */}
       <div className="container mx-auto px-6 py-20">
         <div className="max-w-4xl mx-auto bg-gradient-to-r from-purple-900/40 to-blue-900/40 backdrop-blur-sm border border-white/10 rounded-3xl p-12 text-center">
-          <h2 className="text-4xl font-bold mb-6">Ready to amplify your event content?</h2>
+          <h2 className="text-4xl font-bold mb-6">Join the Creator Economy</h2>
           <p className="text-xl text-gray-300 mb-8">
-            Join thousands of creators sharing and discovering event moments.
+            Upload your next event. Earn from your content. Support fellow creators.
           </p>
           <Link
             href="/auth/signup"
             className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full text-lg font-semibold hover:from-purple-600 hover:to-blue-600 transition transform hover:scale-105"
           >
-            Get Started Free
+            Start Earning Free
           </Link>
+          <p className="text-sm text-gray-400 mt-4">
+            No credit card required. Upload unlimited. Earn 50% on every download.
+          </p>
         </div>
       </div>
 
@@ -194,7 +314,7 @@ export default function Home() {
               </Link>
             </div>
             <div className="text-gray-400 text-sm">
-              © 2026 Aura. Built for creators.
+              © 2026 Aura. The Uber for Event Content.
             </div>
           </div>
         </div>
