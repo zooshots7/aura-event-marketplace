@@ -2,6 +2,8 @@
 
 **Collaborative content sharing for events. Upload, discover, download.**
 
+🌐 **Live at [clawsup.fun](https://clawsup.fun)**
+
 ## 🔥 What is Aura?
 
 Aura solves the problem of scattered event content. Instead of everyone hoarding their own photos/videos, attendees upload to a shared event pool. AI auto-tags everything, making it instantly searchable. Creators download what they need, uploaders earn 50% revenue share.
@@ -23,7 +25,7 @@ Aura solves the problem of scattered event content. Instead of everyone hoarding
 - **Backend:** Supabase (Auth, Database, Storage)
 - **AI:** Google Cloud Vision API
 - **Payments:** Razorpay
-- **Deployment:** Vercel
+- **Deployment:** Railway ([clawsup.fun](https://clawsup.fun))
 
 ## 🚀 Quick Start
 
@@ -136,7 +138,7 @@ Run `supabase-schema.sql` to create:
 2. Integrate Razorpay payments
 3. Build search/filter UI
 4. Create user dashboard
-5. Deploy to Vercel
+5. ~~Deploy to Vercel~~ Deployed to Railway at [clawsup.fun](https://clawsup.fun)
 6. Onboard beta testers
 
 ## 🤝 Contributing

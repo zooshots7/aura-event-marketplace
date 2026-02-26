@@ -22,17 +22,18 @@ NEXT_PUBLIC_RAZORPAY_KEY_ID=your_key_id
 
 ## After Deployment
 
-1. Copy your Railway URL (e.g., `https://aura.railway.app`)
+1. Your app is live at `https://clawsup.fun`
 2. Add it as `NEXT_PUBLIC_APP_URL` in Railway env vars
 3. Update Razorpay webhook URLs to point to Railway
 4. Update Supabase site URL & redirect URLs
 
-## Custom Domain (Optional)
+## Custom Domain
 
-1. Go to Railway Settings → Domains
-2. Add your custom domain
-3. Update DNS records as shown
-4. Update `NEXT_PUBLIC_APP_URL` to your domain
+Domain `clawsup.fun` is configured. Ensure:
+1. Railway Settings → Domains has `clawsup.fun` added
+2. DNS records point to Railway
+3. `NEXT_PUBLIC_APP_URL=https://clawsup.fun` is set in Railway env vars
+4. Supabase site URL & redirect URLs include `https://clawsup.fun`
 
 ---
 
