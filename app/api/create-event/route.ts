@@ -1,9 +1,8 @@
 import { NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { nanoid } from 'nanoid'
-
-const GUEST_ID = '00000000-0000-0000-0000-000000000000'
-const GUEST_EMAIL = 'guest@clawsup.fun'
 
 export async function POST(request: NextRequest) {
     const body = await request.json()
@@ -13,12 +12,45 @@ export async function POST(request: NextRequest) {
         return Response.json({ error: 'Event name is required' }, { status: 400 })
     }
 
-    // Ensure a guest profile exists for anonymous event creation
+    // Get the authenticated user
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            cookies: {
+                getAll() {
+                    return cookieStore.getAll()
+                },
+                setAll(cookiesToSet) {
+                    try {
+                        cookiesToSet.forEach(({ name, value, options }) =>
+                            cookieStore.set(name, value, options),
+                        )
+                    } catch {
+                        // Server Component - can be safely ignored
+                    }
+                },
+            },
+        },
+    )
+
+    const {
+        data: { user },
+        error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+        return Response.json({ error: 'You must be signed in to create an event' }, { status: 401 })
+    }
+
+    // Ensure user profile exists
     await supabaseAdmin.from('profiles').upsert(
         {
-            id: GUEST_ID,
-            email: GUEST_EMAIL,
-            full_name: 'Guest User',
+            id: user.id,
+            email: user.email!,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || null,
+            avatar_url: user.user_metadata?.avatar_url || null,
         },
         { onConflict: 'id' },
     )
@@ -35,12 +67,13 @@ export async function POST(request: NextRequest) {
             start_date: startDate || null,
             end_date: endDate || null,
             is_public: isPublic ?? true,
-            created_by: GUEST_ID,
+            created_by: user.id,
         })
         .select()
         .single()
 
     if (error) {
+        console.error('Error creating event:', error)
         return Response.json({ error: error.message }, { status: 500 })
     }
 
