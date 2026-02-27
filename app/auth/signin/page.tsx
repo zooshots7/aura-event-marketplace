@@ -13,7 +13,55 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [devLoading, setDevLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Dev-only: quick login with a test account
+  const handleDevLogin = async () => {
+    setDevLoading(true)
+    setError('')
+    const devEmail = 'dev@clawsup.fun'
+    const devPassword = 'devtest123'
+
+    // Try sign in first
+    let { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: devEmail,
+      password: devPassword,
+    })
+
+    if (signInErr) {
+      // Account doesn't exist — create it
+      const { data, error: signUpErr } = await supabase.auth.signUp({
+        email: devEmail,
+        password: devPassword,
+        options: { data: { full_name: 'Dev Tester' } },
+      })
+      if (signUpErr) {
+        setError(signUpErr.message)
+        setDevLoading(false)
+        return
+      }
+      if (data.user) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: devEmail,
+          full_name: 'Dev Tester',
+        }, { onConflict: 'id' })
+      }
+      // Try signing in again after signup
+      const { error: retryErr } = await supabase.auth.signInWithPassword({
+        email: devEmail,
+        password: devPassword,
+      })
+      if (retryErr) {
+        setError('Account created but auto-login failed: ' + retryErr.message)
+        setDevLoading(false)
+        return
+      }
+    }
+
+    router.push('/events')
+  }
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -199,6 +247,27 @@ export default function SignIn() {
                 Create one
               </Link>
             </p>
+
+            {/* Dev Quick Login */}
+            <div className="mt-6 pt-6 border-t border-white/5">
+              <button
+                onClick={handleDevLogin}
+                disabled={devLoading || loading || googleLoading}
+                className="w-full py-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl font-medium text-yellow-400 hover:bg-yellow-500/20 hover:border-yellow-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              >
+                {devLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Logging in…
+                  </>
+                ) : (
+                  '⚡ Quick Dev Login (Skip Auth)'
+                )}
+              </button>
+              <p className="text-[11px] text-gray-600 text-center mt-2">
+                Signs in as dev@clawsup.fun — for testing only
+              </p>
+            </div>
           </div>
         </div>
 

@@ -45,6 +45,7 @@ function ImportPageInner() {
             const { data } = await supabase
                 .from('events')
                 .select('*')
+                .eq('is_public', true)
                 .order('created_at', { ascending: false })
 
             if (data) {

@@ -3,6 +3,8 @@
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-drama: var(--font-playfair), serif;
+  --font-mono: var(--font-mono), monospace;
 }
 
 :root {
@@ -28,9 +30,18 @@ h6 {
   .glass-panel {
     @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-2xl;
   }
-  
+
   .glass-panel-hover {
     @apply hover:bg-white/10 hover:border-white/20 transition-all duration-300;
+  }
+
+  .bg-noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
   }
 }
 
@@ -38,12 +49,15 @@ h6 {
   0% {
     transform: translate(0px, 0px) scale(1);
   }
+
   33% {
     transform: translate(40px, -60px) scale(1.1);
   }
+
   66% {
     transform: translate(-30px, 30px) scale(0.9);
   }
+
   100% {
     transform: translate(0px, 0px) scale(1);
   }

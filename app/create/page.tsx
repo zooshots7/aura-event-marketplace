@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -14,7 +13,7 @@ import {
     ArrowRight,
     Plus,
 } from 'lucide-react'
-import { nanoid } from 'nanoid'
+
 
 export default function CreateEvent() {
     const router = useRouter()
@@ -33,43 +32,34 @@ export default function CreateEvent() {
         setLoading(true)
         setError('')
 
-        // Get current user
-        const {
-            data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-            setError('You must be signed in to create an event.')
-            setLoading(false)
-            return
-        }
-
-        // Generate a short event code
-        const code = nanoid(8)
-
-        const { data, error: insertError } = await supabase
-            .from('events')
-            .insert({
-                code,
-                name,
-                description: description || null,
-                location: location || null,
-                start_date: startDate || null,
-                end_date: endDate || null,
-                is_public: isPublic,
-                created_by: user.id,
+        try {
+            const res = await fetch('/api/create-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name,
+                    description: description || null,
+                    location: location || null,
+                    startDate: startDate || null,
+                    endDate: endDate || null,
+                    isPublic,
+                }),
             })
-            .select()
-            .single()
 
-        if (insertError) {
-            setError(insertError.message)
+            const result = await res.json()
+
+            if (!res.ok) {
+                setError(result.error || 'Failed to create event')
+                setLoading(false)
+                return
+            }
+
+            // Redirect to the import page and pre-select this new event
+            router.push(`/import?eventId=${result.event.id}`)
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Something went wrong')
             setLoading(false)
-            return
         }
-
-        // Redirect to the new event page (or import page)
-        router.push(`/events/${data.code}`)
     }
 
     return (
