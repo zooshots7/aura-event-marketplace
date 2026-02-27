@@ -78,16 +78,16 @@ export default function HowItWorks() {
                         </motion.div>
 
                         {/* Copy (Right) */}
-                        <div className="w-full lg:w-1/2 space-y-8">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-full text-sm font-medium text-purple-300">
-                                <DollarSign className="w-4 h-4 text-purple-400" />
+                        <div className="w-full lg:w-1/2 space-y-6 md:space-y-8">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-full text-xs md:text-sm font-medium text-purple-300">
+                                <DollarSign className="w-3 h-3 md:w-4 md:h-4 text-purple-400" />
                                 50% Creator Split
                             </div>
-                            <h3 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+                            <h3 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
                                 Upload in seconds.<br />
                                 <span className="text-gray-400">Earn in perpetuity.</span>
                             </h3>
-                            <p className="text-xl text-gray-400 font-light leading-relaxed">
+                            <p className="text-lg md:text-xl text-gray-400 font-light leading-relaxed">
                                 Drop your raw gallery. Our neural engine automatically tags faces, categorizes moments, and grades quality. Your portfolio is instantly live and searchable to attendees.
                             </p>
                         </div>
@@ -138,16 +138,16 @@ export default function HowItWorks() {
                         </motion.div>
 
                         {/* Copy (Left) */}
-                        <div className="w-full lg:w-1/2 space-y-8">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/20 rounded-full text-sm font-medium text-blue-300">
-                                <Search className="w-4 h-4 text-blue-400" />
+                        <div className="w-full lg:w-1/2 space-y-6 md:space-y-8 mt-10 lg:mt-0">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/20 rounded-full text-xs md:text-sm font-medium text-blue-300">
+                                <Search className="w-3 h-3 md:w-4 md:h-4 text-blue-400" />
                                 Semantic Search
                             </div>
-                            <h3 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+                            <h3 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
                                 Stop scrolling.<br />
                                 <span className="text-gray-400">Start finding.</span>
                             </h3>
-                            <p className="text-xl text-gray-400 font-light leading-relaxed">
+                            <p className="text-lg md:text-xl text-gray-400 font-light leading-relaxed">
                                 Forget looking through thousands of unorganized files. Use natural language or simply upload a selfie to instantly find every angle you were captured from.
                             </p>
                         </div>
@@ -203,16 +203,16 @@ export default function HowItWorks() {
                         </motion.div>
 
                         {/* Copy (Right) */}
-                        <div className="w-full lg:w-1/2 space-y-8">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500/10 to-transparent border border-pink-500/20 rounded-full text-sm font-medium text-pink-300">
-                                <Zap className="w-4 h-4 text-pink-400" />
+                        <div className="w-full lg:w-1/2 space-y-6 md:space-y-8 mt-10 lg:mt-0">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-pink-500/10 to-transparent border border-pink-500/20 rounded-full text-xs md:text-sm font-medium text-pink-300">
+                                <Zap className="w-3 h-3 md:w-4 md:h-4 text-pink-400" />
                                 Instant Download
                             </div>
-                            <h3 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+                            <h3 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight">
                                 Preview freely.<br />
                                 <span className="text-gray-400">Unlock brilliance.</span>
                             </h3>
-                            <p className="text-xl text-gray-400 font-light leading-relaxed">
+                            <p className="text-lg md:text-xl text-gray-400 font-light leading-relaxed">
                                 Browse watermarked previews for absolutely free. When you find the perfect shot, simple micro-transactions unlock the uncompressed, unwatermarked master file instantly.
                             </p>
                         </div>

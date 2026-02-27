@@ -54,7 +54,7 @@ export default function SocialProof() {
                 {repeatEvents.map((event, idx) => (
                     <div
                         key={idx}
-                        className="w-[300px] h-[200px] rounded-2xl relative overflow-hidden group flex-shrink-0 border border-white/10"
+                        className="w-[260px] h-[180px] md:w-[300px] md:h-[200px] rounded-2xl relative overflow-hidden group flex-shrink-0 border border-white/10"
                     >
                         <img
                             src={event.img}

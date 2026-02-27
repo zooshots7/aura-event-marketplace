@@ -36,24 +36,26 @@ export default function Hero() {
         >
             {/* Background Image with Parallax */}
             <motion.div
-                className="absolute inset-0 z-0"
+                className="absolute inset-0 z-0 flex items-center justify-center opacity-60 mix-blend-screen"
                 style={{ y: yParallax }}
             >
-                <Image
-                    src="https://images.unsplash.com/photo-1540039155732-6a71ab43c080?q=80&w=2800&auto=format&fit=crop"
-                    alt="Concert Crowd"
-                    fill
-                    className="object-cover object-[center_30%] opacity-40"
-                    priority
-                    sizes="100vw"
-                />
+                <div className="relative w-full h-[120%] -mt-[10%]">
+                    <Image
+                        src="/nano_banana.png"
+                        alt="Nano Banana"
+                        fill
+                        className="object-cover md:object-contain object-center scale-150 md:scale-100 opacity-60 filter saturate-150 hue-rotate-15"
+                        priority
+                        sizes="100vw"
+                    />
+                </div>
                 {/* Heavy Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-purple-900/60 via-black/80 to-[#0A0A0A]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-purple-900/40 via-black/80 to-[#0A0A0A]" />
             </motion.div>
 
             {/* Animated Floating Blob */}
             <motion.div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle,_rgba(124,58,237,0.3)_0%,_transparent_70%)] rounded-full mix-blend-screen pointer-events-none z-0 filter blur-3xl animate-pulse"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-[radial-gradient(circle,_rgba(124,58,237,0.3)_0%,_transparent_70%)] rounded-full mix-blend-screen pointer-events-none z-0 filter blur-3xl animate-pulse"
                 animate={{
                     scale: [1, 1.1, 1],
                     rotate: [0, 90, 0],
@@ -68,23 +70,23 @@ export default function Hero() {
             {/* Content */}
             <div className="relative z-10 container mx-auto px-6 text-center mt-12 md:mt-0 flex flex-col items-center">
                 {/* Badge */}
-                <div className="hero-text-elem inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-8 backdrop-blur-md shadow-lg shadow-purple-900/20">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
-                    <span className="text-sm font-medium text-gray-200 tracking-wide uppercase">The New Standard for Event Content</span>
+                <div className="hero-text-elem inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-white/5 border border-white/10 rounded-full mb-8 backdrop-blur-md shadow-lg shadow-purple-900/20 max-w-[90vw]">
+                    <Sparkles className="w-3 h-3 md:w-4 md:h-4 text-purple-400 flex-shrink-0" />
+                    <span className="text-[10px] md:text-sm font-medium text-gray-200 tracking-wide uppercase truncate">The New Standard for Event Content</span>
                 </div>
 
                 {/* Headlines */}
-                <div ref={textRef} className="flex flex-col items-center gap-2 mb-8">
-                    <h1 className="hero-text-elem text-6xl md:text-8xl lg:text-[7rem] font-black leading-[1.05] tracking-tight text-white drop-shadow-2xl">
+                <div ref={textRef} className="flex flex-col items-center gap-2 mb-8 w-full">
+                    <h1 className="hero-text-elem text-5xl md:text-8xl lg:text-[7rem] font-black leading-[1.05] tracking-tight text-white drop-shadow-2xl text-center px-4">
                         Upload. Discover.
                     </h1>
-                    <h1 className="hero-text-elem text-6xl md:text-8xl lg:text-[7rem] font-black leading-[1.05] tracking-tight bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent font-[family-name:var(--font-playfair)] italic pb-2 pr-4">
+                    <h1 className="hero-text-elem text-5xl md:text-8xl lg:text-[7rem] font-black leading-[1.05] tracking-tight bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent font-[family-name:var(--font-playfair)] italic pb-2 md:pr-4 text-center px-4">
                         Earn Together.
                     </h1>
                 </div>
 
                 {/* Subhead */}
-                <p className="hero-text-elem text-xl md:text-2xl text-gray-400 mb-12 max-w-2xl font-light leading-relaxed">
+                <p className="hero-text-elem text-lg md:text-2xl text-gray-400 mb-12 max-w-2xl font-light leading-relaxed px-4 text-center">
                     The premium peer-to-peer marketplace for event content.
                 </p>
 
