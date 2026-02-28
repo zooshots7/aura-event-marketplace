@@ -101,32 +101,21 @@ export async function POST(request: NextRequest) {
                 }
 
                 try {
-                    // 1. Resolve short URLs and scrape image URLs
-                    send({ type: 'status', message: 'Resolving album link…' })
-
-                    let resolvedUrl: string
-                    try {
-                        resolvedUrl = await resolveAlbumUrl(albumUrl)
-                    } catch {
-                        send({
-                            type: 'error',
-                            message: 'Failed to resolve the album URL. Please make sure you copied the complete share link including the ?key= parameter.',
-                        })
-                        controller.close()
-                        return
-                    }
-
+                    // 1. Scrape image URLs from the shared album
                     send({ type: 'status', message: 'Extracting images from album…' })
 
                     let images: Awaited<ReturnType<typeof GooglePhotosAlbum.fetchImageUrls>>
                     try {
-                        images = await GooglePhotosAlbum.fetchImageUrls(resolvedUrl)
+                        // The library handles redirects internally (gaxios follows redirects)
+                        // Works with both photos.app.goo.gl short links and photos.google.com full URLs
+                        images = await GooglePhotosAlbum.fetchImageUrls(albumUrl)
                     } catch (scrapeErr: unknown) {
                         const msg = scrapeErr instanceof Error ? scrapeErr.message : 'Unknown'
+                        console.error('Album scrape error:', msg)
                         if (msg.includes('404')) {
                             send({
                                 type: 'error',
-                                message: 'Could not access the album (404). Please make sure you copied the COMPLETE share link from Google Photos, including the ?key= parameter at the end. The URL should look like: photos.google.com/share/...?key=...',
+                                message: 'Could not access the album (404). Make sure you paste the share link directly from Google Photos (click Share → Copy link).',
                             })
                         } else {
                             send({
@@ -141,7 +130,7 @@ export async function POST(request: NextRequest) {
                     if (!images || images.length === 0) {
                         send({
                             type: 'error',
-                            message: 'No images found in the album. Make sure the link is a public shared album with the complete URL including the ?key= parameter.',
+                            message: 'No images found in the album. Make sure the link is a public shared album.',
                         })
                         controller.close()
                         return
@@ -157,6 +146,7 @@ export async function POST(request: NextRequest) {
 
                     let imported = 0
                     let failed = 0
+                    let lastError = ''
 
                     // 2. Process each image sequentially
                     for (let i = 0; i < images.length; i++) {
@@ -164,31 +154,34 @@ export async function POST(request: NextRequest) {
                         const fullResUrl = `${img.url}=w${img.width}-h${img.height}`
 
                         try {
+                            // Download the image
                             const imgResponse = await fetch(fullResUrl, {
                                 headers: {
                                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                                 },
                             })
-                            if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`)
+                            if (!imgResponse.ok) throw new Error(`Image download failed: HTTP ${imgResponse.status}`)
 
                             const buffer = await imgResponse.arrayBuffer()
+                            if (buffer.byteLength === 0) throw new Error('Downloaded empty image')
+
                             const fileId = nanoid()
                             const ext = mimeForUrl(img.url) === 'video/mp4' ? 'mp4' : 'jpg'
                             const storagePath = `events/${eventId}/${fileId}.${ext}`
 
                             // Upload to Firebase Storage
-                            const bucket = adminStorage.bucket();
-                            const file = bucket.file(storagePath);
+                            const bucket = adminStorage.bucket()
+                            const file = bucket.file(storagePath)
 
                             await file.save(Buffer.from(buffer), {
                                 metadata: {
                                     contentType: mimeForUrl(img.url),
                                 },
-                            });
+                            })
 
                             // Make the file public
-                            await file.makePublic();
-                            const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+                            await file.makePublic()
+                            const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
 
                             // Insert to Firestore
                             await adminDb.collection('uploads').add({
@@ -220,6 +213,8 @@ export async function POST(request: NextRequest) {
                         } catch (err: unknown) {
                             failed++
                             const message = err instanceof Error ? err.message : 'Unknown error'
+                            lastError = message
+                            console.error(`Failed to import image ${i + 1}/${images.length}:`, message)
                             send({
                                 type: 'progress',
                                 imported,
@@ -232,7 +227,13 @@ export async function POST(request: NextRequest) {
                     }
 
                     // 3. Done
-                    send({ type: 'complete', imported, failed, total: images.length })
+                    send({
+                        type: 'complete',
+                        imported,
+                        failed,
+                        total: images.length,
+                        ...(failed > 0 && lastError ? { lastError } : {}),
+                    })
                 } catch (err: unknown) {
                     const message = err instanceof Error ? err.message : 'Unknown error'
                     send({ type: 'error', message })
