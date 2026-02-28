@@ -1,3 +1,15 @@
+#!/bin/bash
+# Quick fix for events page - removes orderBy to avoid index requirement
+
+cd ~/Desktop/aura
+
+echo "📝 Backing up original file..."
+cp app/events/page.tsx app/events/page.tsx.backup
+
+echo "🔧 Applying fix..."
+
+# Create the fixed version
+cat > app/events/page.tsx.tmp << 'ENDFILE'
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -141,3 +153,16 @@ export default function Events() {
     </div>
   )
 }
+ENDFILE
+
+mv app/events/page.tsx.tmp app/events/page.tsx
+
+echo "✅ Fix applied!"
+echo ""
+echo "Backup saved to: app/events/page.tsx.backup"
+echo ""
+echo "Now:"
+echo "1. Go to Firebase Console and set security rules (see AURA_QUICK_FIX.md)"
+echo "2. Refresh your browser"
+echo "3. Create an event"
+echo "4. Events should appear!"
