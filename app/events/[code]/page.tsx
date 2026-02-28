@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, use } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 import Link from 'next/link'
 import {
     Sparkles,
@@ -65,15 +65,20 @@ export default function EventDetail({
                 const evData = { id: eventSnap.docs[0].id, ...eventSnap.docs[0].data() } as Event;
                 setEvent(evData);
 
-                // Fetch Uploads
+                // Fetch Uploads (no composite index needed - sort client-side)
                 const uploadsQuery = query(
                     collection(db, 'uploads'),
-                    where('event_id', '==', evData.id),
-                    orderBy('created_at', 'desc')
+                    where('event_id', '==', evData.id)
                 );
                 const uploadsSnap = await getDocs(uploadsQuery);
                 const upsData: Upload[] = [];
-                uploadsSnap.forEach(doc => upsData.push({ id: doc.id, ...doc.data() } as Upload));
+                uploadsSnap.forEach(d => upsData.push({ id: d.id, ...d.data() } as Upload));
+                // Sort by created_at descending client-side
+                upsData.sort((a, b) => {
+                    const dateA = new Date(a.created_at || 0).getTime()
+                    const dateB = new Date(b.created_at || 0).getTime()
+                    return dateB - dateA
+                });
                 setUploads(upsData);
             }
         } catch (error) {

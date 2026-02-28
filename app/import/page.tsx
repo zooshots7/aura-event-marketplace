@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/firebase'
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { Event } from '../events/page'
 import Link from 'next/link'
 import {
@@ -45,13 +45,35 @@ function ImportPageInner() {
     useEffect(() => {
         const fetchEvents = async () => {
             try {
-                const q = query(collection(db, 'events'), where('is_public', '==', true), orderBy('created_at', 'desc'));
-                const snap = await getDocs(q);
-                const data: Event[] = [];
-                snap.forEach(doc => data.push({ id: doc.id, ...doc.data() } as Event));
+                // Fetch ALL events from the collection (no composite index needed)
+                const snap = await getDocs(collection(db, 'events'));
+                const allEvents: Event[] = [];
+                snap.forEach(d => allEvents.push({ id: d.id, ...d.data() } as Event));
+
+                // Filter to public events client-side & sort by created_at desc
+                const data = allEvents
+                    .filter(e => e.is_public !== false) // treat missing is_public as true
+                    .sort((a, b) => {
+                        const dateA = new Date(a.created_at || 0).getTime()
+                        const dateB = new Date(b.created_at || 0).getTime()
+                        return dateB - dateA
+                    });
+
+                const preselect = searchParams.get('eventId')
+
+                // If the preselected event isn't in the public list, fetch it directly by ID
+                if (preselect && !data.some(e => e.id === preselect)) {
+                    try {
+                        const eventDoc = await getDoc(doc(db, 'events', preselect));
+                        if (eventDoc.exists()) {
+                            data.unshift({ id: eventDoc.id, ...eventDoc.data() } as Event);
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch event by ID:', e);
+                    }
+                }
 
                 setEvents(data)
-                const preselect = searchParams.get('eventId')
                 if (preselect && data.some(e => e.id === preselect)) {
                     setSelectedEventId(preselect)
                 }

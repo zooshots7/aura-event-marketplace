@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { collection, getDocs } from 'firebase/firestore'
 import Link from 'next/link'
 import { Calendar, MapPin, Users, Plus } from 'lucide-react'
 
@@ -31,25 +31,21 @@ export default function Events() {
 
   const fetchEvents = async () => {
     try {
-      // Temporary: Remove orderBy to avoid composite index requirement
-      // Once index is created in Firebase Console, you can add back: orderBy('created_at', 'desc')
-      const q = query(
-        collection(db, 'events'),
-        where('is_public', '==', true)
-      )
-
-      const querySnapshot = await getDocs(q)
-      const fetchedEvents: Event[] = []
-      querySnapshot.forEach((doc) => {
-        fetchedEvents.push({ id: doc.id, ...doc.data() } as Event)
+      // Fetch ALL events (no composite index needed)
+      const querySnapshot = await getDocs(collection(db, 'events'))
+      const allEvents: Event[] = []
+      querySnapshot.forEach((d) => {
+        allEvents.push({ id: d.id, ...d.data() } as Event)
       })
 
-      // Sort manually by created_at (newest first)
-      fetchedEvents.sort((a, b) => {
-        const dateA = new Date(a.created_at || 0).getTime()
-        const dateB = new Date(b.created_at || 0).getTime()
-        return dateB - dateA
-      })
+      // Filter to public events client-side & sort by created_at desc
+      const fetchedEvents = allEvents
+        .filter(e => e.is_public !== false) // treat missing is_public as true
+        .sort((a, b) => {
+          const dateA = new Date(a.created_at || 0).getTime()
+          const dateB = new Date(b.created_at || 0).getTime()
+          return dateB - dateA
+        })
 
       setEvents(fetchedEvents)
     } catch (error) {
