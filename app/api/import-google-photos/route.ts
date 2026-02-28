@@ -54,189 +54,204 @@ function mimeForUrl(url: string): string {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
-    const { albumUrl, eventId } = (await request.json()) as {
-        albumUrl?: string
-        eventId?: string
-    }
+    try {
+        const { albumUrl, eventId } = (await request.json()) as {
+            albumUrl?: string
+            eventId?: string
+        }
 
-    // ── Validation ───────────────────────────────────────────────────────
-    if (!albumUrl || !eventId) {
-        return Response.json(
-            { error: 'albumUrl and eventId are required' },
-            { status: 400 },
-        )
-    }
+        // ── Validation ───────────────────────────────────────────────────────
+        if (!albumUrl || !eventId) {
+            return Response.json(
+                { error: 'albumUrl and eventId are required' },
+                { status: 400 },
+            )
+        }
 
-    if (!isValidAlbumUrl(albumUrl)) {
-        return Response.json(
-            { error: 'Invalid Google Photos album URL. Please use a photos.app.goo.gl or photos.google.com share link.' },
-            { status: 400 },
-        )
-    }
+        if (!isValidAlbumUrl(albumUrl)) {
+            return Response.json(
+                { error: 'Invalid Google Photos album URL. Please use a photos.app.goo.gl or photos.google.com share link.' },
+                { status: 400 },
+            )
+        }
 
-    // Ensure the event exists
-    const eventDoc = await adminDb.collection('events').doc(eventId).get();
+        // Ensure the event exists
+        let eventDoc;
+        try {
+            eventDoc = await adminDb.collection('events').doc(eventId).get();
+        } catch (dbErr: unknown) {
+            console.error('Firebase Admin error:', dbErr);
+            return Response.json(
+                { error: 'Database connection error. Please check server configuration.' },
+                { status: 500 },
+            )
+        }
 
-    if (!eventDoc.exists) {
-        return Response.json({ error: 'Event not found' }, { status: 404 })
-    }
+        if (!eventDoc.exists) {
+            return Response.json({ error: 'Event not found' }, { status: 404 })
+        }
 
-    // ── Streaming response ───────────────────────────────────────────────
-    const encoder = new TextEncoder()
+        // ── Streaming response ───────────────────────────────────────────────
+        const encoder = new TextEncoder()
 
-    const stream = new ReadableStream({
-        async start(controller) {
-            const send = (payload: Record<string, unknown>) => {
-                controller.enqueue(encoder.encode(JSON.stringify(payload) + '\n'))
-            }
+        const stream = new ReadableStream({
+            async start(controller) {
+                const send = (payload: Record<string, unknown>) => {
+                    controller.enqueue(encoder.encode(JSON.stringify(payload) + '\n'))
+                }
 
-            try {
-                // 1. Resolve short URLs and scrape image URLs
-                send({ type: 'status', message: 'Resolving album link…' })
-
-                let resolvedUrl: string
                 try {
-                    resolvedUrl = await resolveAlbumUrl(albumUrl)
-                } catch {
-                    send({
-                        type: 'error',
-                        message: 'Failed to resolve the album URL. Please make sure you copied the complete share link including the ?key= parameter.',
-                    })
-                    controller.close()
-                    return
-                }
+                    // 1. Resolve short URLs and scrape image URLs
+                    send({ type: 'status', message: 'Resolving album link…' })
 
-                send({ type: 'status', message: 'Extracting images from album…' })
-
-                let images: Awaited<ReturnType<typeof GooglePhotosAlbum.fetchImageUrls>>
-                try {
-                    images = await GooglePhotosAlbum.fetchImageUrls(resolvedUrl)
-                } catch (scrapeErr: unknown) {
-                    const msg = scrapeErr instanceof Error ? scrapeErr.message : 'Unknown'
-                    if (msg.includes('404')) {
-                        send({
-                            type: 'error',
-                            message: 'Could not access the album (404). Please make sure you copied the COMPLETE share link from Google Photos, including the ?key= parameter at the end. The URL should look like: photos.google.com/share/...?key=...',
-                        })
-                    } else {
-                        send({
-                            type: 'error',
-                            message: `Failed to extract images: ${msg}`,
-                        })
-                    }
-                    controller.close()
-                    return
-                }
-
-                if (!images || images.length === 0) {
-                    send({
-                        type: 'error',
-                        message: 'No images found in the album. Make sure the link is a public shared album with the complete URL including the ?key= parameter.',
-                    })
-                    controller.close()
-                    return
-                }
-
-                send({
-                    type: 'status',
-                    message: `Found ${images.length} images. Starting import…`,
-                    total: images.length,
-                })
-
-                const uploaderId = eventDoc.data()?.created_by || null
-
-                let imported = 0
-                let failed = 0
-
-                // 2. Process each image sequentially
-                for (let i = 0; i < images.length; i++) {
-                    const img = images[i]
-                    const fullResUrl = `${img.url}=w${img.width}-h${img.height}`
-
+                    let resolvedUrl: string
                     try {
-                        const imgResponse = await fetch(fullResUrl, {
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                            },
-                        })
-                        if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`)
-
-                        const buffer = await imgResponse.arrayBuffer()
-                        const fileId = nanoid()
-                        const ext = mimeForUrl(img.url) === 'video/mp4' ? 'mp4' : 'jpg'
-                        const storagePath = `events/${eventId}/${fileId}.${ext}`
-
-                        // Upload to Firebase Storage
-                        const bucket = adminStorage.bucket();
-                        const file = bucket.file(storagePath);
-
-                        await file.save(Buffer.from(buffer), {
-                            metadata: {
-                                contentType: mimeForUrl(img.url),
-                            },
-                        });
-
-                        // Make the file public
-                        await file.makePublic();
-                        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-
-                        // Insert to Firestore
-                        await adminDb.collection('uploads').add({
-                            event_id: eventId,
-                            uploaded_by: uploaderId,
-                            file_type: ext === 'mp4' ? 'video' : 'photo',
-                            file_url: publicUrl,
-                            file_size: buffer.byteLength,
-                            width: img.width,
-                            height: img.height,
-                            created_at: new Date().toISOString(),
-                            metadata: {
-                                source: 'google-photos-import',
-                                original_uid: img.uid,
-                                image_update_date: img.imageUpdateDate,
-                                album_add_date: img.albumAddDate,
-                            },
-                        })
-
-                        imported++
+                        resolvedUrl = await resolveAlbumUrl(albumUrl)
+                    } catch {
                         send({
-                            type: 'progress',
-                            imported,
-                            failed,
-                            current: i + 1,
-                            total: images.length,
-                            fileName: `${fileId}.${ext}`,
+                            type: 'error',
+                            message: 'Failed to resolve the album URL. Please make sure you copied the complete share link including the ?key= parameter.',
                         })
-                    } catch (err: unknown) {
-                        failed++
-                        const message = err instanceof Error ? err.message : 'Unknown error'
-                        send({
-                            type: 'progress',
-                            imported,
-                            failed,
-                            current: i + 1,
-                            total: images.length,
-                            error: message,
-                        })
+                        controller.close()
+                        return
                     }
+
+                    send({ type: 'status', message: 'Extracting images from album…' })
+
+                    let images: Awaited<ReturnType<typeof GooglePhotosAlbum.fetchImageUrls>>
+                    try {
+                        images = await GooglePhotosAlbum.fetchImageUrls(resolvedUrl)
+                    } catch (scrapeErr: unknown) {
+                        const msg = scrapeErr instanceof Error ? scrapeErr.message : 'Unknown'
+                        if (msg.includes('404')) {
+                            send({
+                                type: 'error',
+                                message: 'Could not access the album (404). Please make sure you copied the COMPLETE share link from Google Photos, including the ?key= parameter at the end. The URL should look like: photos.google.com/share/...?key=...',
+                            })
+                        } else {
+                            send({
+                                type: 'error',
+                                message: `Failed to extract images: ${msg}`,
+                            })
+                        }
+                        controller.close()
+                        return
+                    }
+
+                    if (!images || images.length === 0) {
+                        send({
+                            type: 'error',
+                            message: 'No images found in the album. Make sure the link is a public shared album with the complete URL including the ?key= parameter.',
+                        })
+                        controller.close()
+                        return
+                    }
+
+                    send({
+                        type: 'status',
+                        message: `Found ${images.length} images. Starting import…`,
+                        total: images.length,
+                    })
+
+                    const uploaderId = eventDoc.data()?.created_by || null
+
+                    let imported = 0
+                    let failed = 0
+
+                    // 2. Process each image sequentially
+                    for (let i = 0; i < images.length; i++) {
+                        const img = images[i]
+                        const fullResUrl = `${img.url}=w${img.width}-h${img.height}`
+
+                        try {
+                            const imgResponse = await fetch(fullResUrl, {
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                                },
+                            })
+                            if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`)
+
+                            const buffer = await imgResponse.arrayBuffer()
+                            const fileId = nanoid()
+                            const ext = mimeForUrl(img.url) === 'video/mp4' ? 'mp4' : 'jpg'
+                            const storagePath = `events/${eventId}/${fileId}.${ext}`
+
+                            // Upload to Firebase Storage
+                            const bucket = adminStorage.bucket();
+                            const file = bucket.file(storagePath);
+
+                            await file.save(Buffer.from(buffer), {
+                                metadata: {
+                                    contentType: mimeForUrl(img.url),
+                                },
+                            });
+
+                            // Make the file public
+                            await file.makePublic();
+                            const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+
+                            // Insert to Firestore
+                            await adminDb.collection('uploads').add({
+                                event_id: eventId,
+                                uploaded_by: uploaderId,
+                                file_type: ext === 'mp4' ? 'video' : 'photo',
+                                file_url: publicUrl,
+                                file_size: buffer.byteLength,
+                                width: img.width,
+                                height: img.height,
+                                created_at: new Date().toISOString(),
+                                metadata: {
+                                    source: 'google-photos-import',
+                                    original_uid: img.uid,
+                                    image_update_date: img.imageUpdateDate,
+                                    album_add_date: img.albumAddDate,
+                                },
+                            })
+
+                            imported++
+                            send({
+                                type: 'progress',
+                                imported,
+                                failed,
+                                current: i + 1,
+                                total: images.length,
+                                fileName: `${fileId}.${ext}`,
+                            })
+                        } catch (err: unknown) {
+                            failed++
+                            const message = err instanceof Error ? err.message : 'Unknown error'
+                            send({
+                                type: 'progress',
+                                imported,
+                                failed,
+                                current: i + 1,
+                                total: images.length,
+                                error: message,
+                            })
+                        }
+                    }
+
+                    // 3. Done
+                    send({ type: 'complete', imported, failed, total: images.length })
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : 'Unknown error'
+                    send({ type: 'error', message })
+                } finally {
+                    controller.close()
                 }
+            },
+        })
 
-                // 3. Done
-                send({ type: 'complete', imported, failed, total: images.length })
-            } catch (err: unknown) {
-                const message = err instanceof Error ? err.message : 'Unknown error'
-                send({ type: 'error', message })
-            } finally {
-                controller.close()
-            }
-        },
-    })
-
-    return new Response(stream, {
-        headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-        },
-    })
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Transfer-Encoding': 'chunked',
+                'Cache-Control': 'no-cache',
+            },
+        })
+    } catch (err: unknown) {
+        console.error('Import API error:', err);
+        const message = err instanceof Error ? err.message : 'Internal server error';
+        return Response.json({ error: message }, { status: 500 });
+    }
 }
