@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
 
                 try {
                     // 1. Scrape image URLs from the shared album
+                    console.log('[import] Starting scrape for URL:', albumUrl)
                     send({ type: 'status', message: 'Extracting images from album…' })
 
                     let images: Awaited<ReturnType<typeof GooglePhotosAlbum.fetchImageUrls>>
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
                         // The library handles redirects internally (gaxios follows redirects)
                         // Works with both photos.app.goo.gl short links and photos.google.com full URLs
                         images = await GooglePhotosAlbum.fetchImageUrls(albumUrl)
+                        console.log('[import] Scrape result:', images ? images.length + ' images' : 'null')
                     } catch (scrapeErr: unknown) {
                         const msg = scrapeErr instanceof Error ? scrapeErr.message : 'Unknown'
                         console.error('Album scrape error:', msg)
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
                     }
 
                     if (!images || images.length === 0) {
+                        console.error('[import] No images found after scraping')
                         send({
                             type: 'error',
                             message: 'No images found in the album. Make sure the link is a public shared album.',
@@ -154,6 +157,7 @@ export async function POST(request: NextRequest) {
                         const fullResUrl = `${img.url}=w${img.width}-h${img.height}`
 
                         try {
+                            console.log(`[import] Processing image ${i + 1}/${images.length}`)
                             // Download the image
                             const imgResponse = await fetch(fullResUrl, {
                                 headers: {
@@ -169,6 +173,7 @@ export async function POST(request: NextRequest) {
                             const ext = mimeForUrl(img.url) === 'video/mp4' ? 'mp4' : 'jpg'
                             const storagePath = `events/${eventId}/${fileId}.${ext}`
 
+                            console.log(`[import] Downloaded image ${i + 1}: ${buffer.byteLength} bytes`)
                             // Upload to Firebase Storage
                             const bucket = adminStorage.bucket()
                             const file = bucket.file(storagePath)
@@ -183,6 +188,7 @@ export async function POST(request: NextRequest) {
                             await file.makePublic()
                             const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`
 
+                            console.log(`[import] Uploaded to storage: ${storagePath}`)
                             // Insert to Firestore
                             await adminDb.collection('uploads').add({
                                 event_id: eventId,
