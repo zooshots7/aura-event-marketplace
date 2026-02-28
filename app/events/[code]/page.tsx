@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, use } from 'react'
-import { supabase, Event, Upload } from '@/lib/supabase'
+import { db } from '@/lib/firebase'
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
 import Link from 'next/link'
 import {
     Sparkles,
@@ -15,6 +16,31 @@ import {
     CheckCircle2,
     ArrowLeft,
 } from 'lucide-react'
+
+export interface Event {
+    id: string;
+    code: string;
+    name: string;
+    description?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    is_public: boolean;
+    created_at?: string;
+    created_by?: string;
+}
+
+export interface Upload {
+    id: string;
+    event_id: string;
+    file_url: string;
+    thumbnail_url?: string;
+    blur_hash?: string;
+    ai_tags?: string[];
+    width?: number;
+    height?: number;
+    created_at?: string;
+}
 
 export default function EventDetail({
     params,
@@ -31,23 +57,30 @@ export default function EventDetail({
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
     const fetchEvent = useCallback(async () => {
-        const { data: ev } = await supabase
-            .from('events')
-            .select('*')
-            .eq('code', code)
-            .single()
+        try {
+            // Fetch Event
+            const eventQuery = query(collection(db, 'events'), where('code', '==', code));
+            const eventSnap = await getDocs(eventQuery);
+            if (!eventSnap.empty) {
+                const evData = { id: eventSnap.docs[0].id, ...eventSnap.docs[0].data() } as Event;
+                setEvent(evData);
 
-        if (ev) {
-            setEvent(ev)
-            const { data: ups } = await supabase
-                .from('uploads')
-                .select('*')
-                .eq('event_id', ev.id)
-                .order('created_at', { ascending: false })
-
-            if (ups) setUploads(ups)
+                // Fetch Uploads
+                const uploadsQuery = query(
+                    collection(db, 'uploads'),
+                    where('event_id', '==', evData.id),
+                    orderBy('created_at', 'desc')
+                );
+                const uploadsSnap = await getDocs(uploadsQuery);
+                const upsData: Upload[] = [];
+                uploadsSnap.forEach(doc => upsData.push({ id: doc.id, ...doc.data() } as Upload));
+                setUploads(upsData);
+            }
+        } catch (error) {
+            console.error('Error fetching event details:', error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false)
     }, [code])
 
     useEffect(() => {
@@ -269,8 +302,8 @@ export default function EventDetail({
                                         key={tag}
                                         onClick={() => toggleTag(tag)}
                                         className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition border ${selectedTags.includes(tag)
-                                                ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
-                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                                            ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200'
                                             }`}
                                     >
                                         {tag}

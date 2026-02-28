@@ -1,8 +1,15 @@
 import { NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { nanoid } from 'nanoid'
+import { adminAuth, adminDb } from '@/lib/firebase-admin'
+
+// Utility function to generate a random 8-character string for event code
+const nanoid = (length: number = 8) => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let result = ''
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return result
+}
 
 export async function POST(request: NextRequest) {
     const body = await request.json()
@@ -12,54 +19,31 @@ export async function POST(request: NextRequest) {
         return Response.json({ error: 'Event name is required' }, { status: 400 })
     }
 
-    // Get the authenticated user
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() {
-                    return cookieStore.getAll()
-                },
-                setAll(cookiesToSet) {
-                    try {
-                        cookiesToSet.forEach(({ name, value, options }) =>
-                            cookieStore.set(name, value, options),
-                        )
-                    } catch {
-                        // Server Component - can be safely ignored
-                    }
-                },
-            },
-        },
-    )
+    try {
+        // Authenticate the user checking the Authorization header bearer token
+        const authHeader = request.headers.get('Authorization')
+        if (!authHeader?.startsWith('Bearer ')) {
+            return Response.json({ error: 'Unauthorized: Missing or invalid token' }, { status: 401 })
+        }
 
-    const {
-        data: { user },
-        error: authError,
-    } = await supabase.auth.getUser()
+        const idToken = authHeader.split('Bearer ')[1]
+        const decodedToken = await adminAuth.verifyIdToken(idToken)
+        const uid = decodedToken.uid
 
-    if (authError || !user) {
-        return Response.json({ error: 'You must be signed in to create an event' }, { status: 401 })
-    }
+        // Ensure user profile exists
+        const userRef = adminDb.collection('users').doc(uid)
+        const userDoc = await userRef.get()
+        if (!userDoc.exists) {
+            await userRef.set({
+                email: decodedToken.email || '',
+                full_name: decodedToken.name || decodedToken.email?.split('@')[0] || 'User',
+            }, { merge: true })
+        }
 
-    // Ensure user profile exists
-    await supabaseAdmin.from('profiles').upsert(
-        {
-            id: user.id,
-            email: user.email!,
-            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || null,
-            avatar_url: user.user_metadata?.avatar_url || null,
-        },
-        { onConflict: 'id' },
-    )
+        const code = nanoid(8)
 
-    const code = nanoid(8)
-
-    const { data, error } = await supabaseAdmin
-        .from('events')
-        .insert({
+        const newEvent = {
+            id: adminDb.collection('events').doc().id,
             code,
             name,
             description: description || null,
@@ -67,15 +51,15 @@ export async function POST(request: NextRequest) {
             start_date: startDate || null,
             end_date: endDate || null,
             is_public: isPublic ?? true,
-            created_by: user.id,
-        })
-        .select()
-        .single()
+            created_by: uid,
+            created_at: new Date().toISOString()
+        }
 
-    if (error) {
+        await adminDb.collection('events').doc(newEvent.id).set(newEvent)
+
+        return Response.json({ event: newEvent })
+    } catch (error: any) {
         console.error('Error creating event:', error)
-        return Response.json({ error: error.message }, { status: 500 })
+        return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 })
     }
-
-    return Response.json({ event: data })
 }

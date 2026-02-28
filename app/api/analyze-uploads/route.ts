@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { adminDb } from '@/lib/firebase-admin'
 
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
@@ -27,13 +27,13 @@ export async function POST(request: NextRequest) {
         projectId === 'your_project_id'
     ) {
         // Gracefully skip — generate placeholder tags so the UI still works
-        const { data: uploads } = await supabaseAdmin
-            .from('uploads')
-            .select('id, file_type')
-            .eq('event_id', eventId)
-            .is('ai_tags', null)
+        const uploadsSnap = await adminDb.collection('uploads')
+            .where('event_id', '==', eventId)
+            .get();
 
-        if (!uploads || uploads.length === 0) {
+        const unanalyzedUploads = uploadsSnap.docs.filter(doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0);
+
+        if (unanalyzedUploads.length === 0) {
             return Response.json({ analyzed: 0, message: 'All uploads already analyzed' })
         }
 
@@ -43,20 +43,22 @@ export async function POST(request: NextRequest) {
             video: ['event', 'video', 'motion', 'celebration'],
         }
 
-        let analyzed = 0
-        for (const upload of uploads) {
-            const baseTags = demoTags[upload.file_type] || demoTags.photo
+        let analyzed = 0;
+        const batch = adminDb.batch();
+
+        for (const uploadDoc of unanalyzedUploads) {
+            const upload = uploadDoc.data();
+            const fileType = upload.file_type || 'photo';
+            const baseTags = demoTags[fileType] || demoTags.photo;
             // Randomly pick 2-4 tags to make filtering interesting
-            const shuffled = [...baseTags].sort(() => 0.5 - Math.random())
-            const tags = shuffled.slice(0, 2 + Math.floor(Math.random() * 3))
+            const shuffled = [...baseTags].sort(() => 0.5 - Math.random());
+            const tags = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
 
-            await supabaseAdmin
-                .from('uploads')
-                .update({ ai_tags: tags })
-                .eq('id', upload.id)
-
-            analyzed++
+            batch.update(uploadDoc.ref, { ai_tags: tags });
+            analyzed++;
         }
+
+        await batch.commit();
 
         return Response.json({
             analyzed,
@@ -65,13 +67,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Real Vision API analysis ───────────────────────────────────────
-    const { data: uploads } = await supabaseAdmin
-        .from('uploads')
-        .select('id, file_url')
-        .eq('event_id', eventId)
-        .is('ai_tags', null)
+    const uploadsSnap = await adminDb.collection('uploads')
+        .where('event_id', '==', eventId)
+        .get();
 
-    if (!uploads || uploads.length === 0) {
+    const unanalyzedUploads = uploadsSnap.docs.filter(doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0);
+
+    if (unanalyzedUploads.length === 0) {
         return Response.json({ analyzed: 0, message: 'All uploads already analyzed' })
     }
 
@@ -80,7 +82,10 @@ export async function POST(request: NextRequest) {
     let analyzed = 0
     let failed = 0
 
-    for (const upload of uploads) {
+    // Batch processing limits depending on scale - doing sequentially for now
+    for (const uploadDoc of unanalyzedUploads) {
+        const upload = uploadDoc.data();
+
         try {
             const visionBody = {
                 requests: [
@@ -110,16 +115,12 @@ export async function POST(request: NextRequest) {
                     (l: { description: string }) => l.description.toLowerCase(),
                 ) || []
 
-            await supabaseAdmin
-                .from('uploads')
-                .update({ ai_tags: labels })
-                .eq('id', upload.id)
-
+            await uploadDoc.ref.update({ ai_tags: labels });
             analyzed++
         } catch {
             failed++
         }
     }
 
-    return Response.json({ analyzed, failed, total: uploads.length })
+    return Response.json({ analyzed, failed, total: unanalyzedUploads.length })
 }

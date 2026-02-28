@@ -12,9 +12,8 @@
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.4",
-    "@supabase/auth-helpers-nextjs": "^0.15.0",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.97.0",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
     "framer-motion": "^12.34.3",
     "google-photos-album-image-url-fetch": "^3.2.0",
     "gsap": "^3.14.2",

@@ -1,9 +1,25 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, Event } from '@/lib/supabase'
+import { db } from '@/lib/firebase'
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
 import Link from 'next/link'
 import { Calendar, MapPin, Users, Plus } from 'lucide-react'
+
+// Define Event inline locally as it used to come from lib/supabase
+export interface Event {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  is_public: boolean;
+  created_at?: string;
+  created_by?: string;
+  cover_image?: string;
+}
 
 export default function Events() {
   const [events, setEvents] = useState<Event[]>([])
@@ -14,16 +30,25 @@ export default function Events() {
   }, [])
 
   const fetchEvents = async () => {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('is_public', true)
-      .order('created_at', { ascending: false })
+    try {
+      const q = query(
+        collection(db, 'events'),
+        where('is_public', '==', true),
+        orderBy('created_at', 'desc')
+      )
 
-    if (!error && data) {
-      setEvents(data)
+      const querySnapshot = await getDocs(q)
+      const fetchedEvents: Event[] = []
+      querySnapshot.forEach((doc) => {
+        fetchedEvents.push({ id: doc.id, ...doc.data() } as Event)
+      })
+
+      setEvents(fetchedEvents)
+    } catch (error) {
+      console.error('Error fetching events:', error)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (

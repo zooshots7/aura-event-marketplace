@@ -13,6 +13,7 @@ import {
     ArrowRight,
     Plus,
 } from 'lucide-react'
+import { auth } from '@/lib/firebase'
 
 
 export default function CreateEvent() {
@@ -33,9 +34,21 @@ export default function CreateEvent() {
         setError('')
 
         try {
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                setError('You must be signed in to create an event');
+                setLoading(false);
+                return;
+            }
+
+            const token = await currentUser.getIdToken();
+
             const res = await fetch('/api/create-event', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     name,
                     description: description || null,

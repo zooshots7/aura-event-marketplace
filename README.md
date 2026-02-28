@@ -11,7 +11,7 @@ Aura solves the problem of scattered event content. Instead of everyone hoarding
 ## ✨ Features (MVP)
 
 - ✅ Event pages with unique codes
-- ✅ User authentication (Supabase)
+- ✅ User authentication (Firebase)
 - ✅ Upload photos & videos
 - ✅ AI auto-tagging (Google Vision API)
 - ✅ Search & filter content
@@ -22,7 +22,7 @@ Aura solves the problem of scattered event content. Instead of everyone hoarding
 ## 🛠️ Tech Stack
 
 - **Frontend:** Next.js 15, TypeScript, Tailwind CSS
-- **Backend:** Supabase (Auth, Database, Storage)
+- **Backend:** Firebase (Auth, Firestore DB, Cloud Storage)
 - **AI:** Google Cloud Vision API
 - **Payments:** Razorpay
 - **Deployment:** Railway ([clawsup.fun](https://clawsup.fun))
@@ -36,24 +36,23 @@ cd aura
 npm install
 ```
 
-### 2. Set up Supabase
-
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Run the SQL schema from `supabase-schema.sql` in the SQL Editor
-3. Create two storage buckets:
-   - `event-uploads` (public)
-   - `thumbnails` (public)
-4. Copy your project URL and anon key
+### 2. Set up Firebase
+1. Create a new project at [Firebase Console](https://console.firebase.google.com)
+2. Follow the [Firebase setup guide](https://firebase.google.com/docs/web/setup) to enable Authentication (Email & Google), Firestore Database, and Cloud Storage.
 
 ### 3. Configure Environment Variables
 
 Create `.env.local`:
 
 ```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+# Firebase
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+FIREBASE_SERVICE_ACCOUNT=your_service_account_json_string
 
 # Google Cloud Vision
 GOOGLE_CLOUD_PROJECT_ID=your_project_id

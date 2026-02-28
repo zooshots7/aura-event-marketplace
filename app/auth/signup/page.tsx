@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { auth, db } from '@/lib/firebase'
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Loader2, Mail, Lock, User, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
@@ -38,38 +40,19 @@ export default function SignUp() {
     setLoading(true)
     setError('')
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
 
-    if (signUpError) {
-      setError(signUpError.message)
+      // Create user doc
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email: email,
+        full_name: fullName,
+      })
+
+      router.push('/events')
+    } catch (err: any) {
+      setError(err.message)
       setLoading(false)
-      return
-    }
-
-    if (data.user) {
-      // Create profile
-      await supabase.from('profiles').insert([
-        {
-          id: data.user.id,
-          email: data.user.email!,
-          full_name: fullName,
-        },
-      ])
-
-      // If email confirmation is required, show success message
-      if (data.user.identities?.length === 0 || data.session === null) {
-        setSuccess(true)
-        setLoading(false)
-      } else {
-        router.push('/events')
-      }
     }
   }
 
@@ -77,15 +60,23 @@ export default function SignUp() {
     setGoogleLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+    try {
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
 
-    if (error) {
-      setError(error.message)
+      // Upsert profile in Firestore if it's their first time
+      const userRef = doc(db, 'users', result.user.uid)
+      const userSnap = await getDoc(userRef)
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          email: result.user.email,
+          full_name: result.user.displayName || 'Google User'
+        })
+      }
+
+      router.push('/events')
+    } catch (err: any) {
+      setError(err.message)
       setGoogleLoading(false)
     }
   }

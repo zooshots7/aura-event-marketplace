@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { supabase, Event } from '@/lib/supabase'
+import { db } from '@/lib/firebase'
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
+import { Event } from '../events/page'
 import Link from 'next/link'
 import {
     Sparkles,
@@ -42,18 +44,19 @@ function ImportPageInner() {
     // Fetch events on mount & auto-select from URL param
     useEffect(() => {
         const fetchEvents = async () => {
-            const { data } = await supabase
-                .from('events')
-                .select('*')
-                .eq('is_public', true)
-                .order('created_at', { ascending: false })
+            try {
+                const q = query(collection(db, 'events'), where('is_public', '==', true), orderBy('created_at', 'desc'));
+                const snap = await getDocs(q);
+                const data: Event[] = [];
+                snap.forEach(doc => data.push({ id: doc.id, ...doc.data() } as Event));
 
-            if (data) {
                 setEvents(data)
                 const preselect = searchParams.get('eventId')
                 if (preselect && data.some(e => e.id === preselect)) {
                     setSelectedEventId(preselect)
                 }
+            } catch (err) {
+                console.error("Error fetching events:", err);
             }
         }
         fetchEvents()

@@ -2,16 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll } from 'framer-motion';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 export default function Navbar() {
     const { scrollY } = useScroll();
     const [isScrolled, setIsScrolled] = useState(false);
+    const [user, setUser] = useState<User | null>(null);
 
     useEffect(() => {
-        return scrollY.onChange((latest) => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+
+        const scrollUnsubscribe = scrollY.onChange((latest) => {
             setIsScrolled(latest > 100);
         });
+
+        return () => {
+            unsubscribe();
+            scrollUnsubscribe();
+        };
     }, [scrollY]);
 
     return (
@@ -53,17 +65,35 @@ export default function Navbar() {
                     </div>
                 </div>
 
-                {/* CTA */}
                 <div className="flex items-center gap-4">
-                    <Link href="/auth/signin" className="hidden sm:block text-sm font-medium text-gray-300 hover:text-white transition-colors">
-                        Sign In
-                    </Link>
-                    <Link
-                        href="/auth/signup"
-                        className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-full hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] transition-all hover:scale-105"
-                    >
-                        Start Earning
-                    </Link>
+                    {user ? (
+                        <div className="flex items-center gap-4">
+                            <span className="text-sm font-medium text-gray-300 hidden sm:block">
+                                {user.displayName || user.email}
+                            </span>
+                            <Link href="/events" className="hidden sm:block text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors">
+                                Dashboard
+                            </Link>
+                            <button
+                                onClick={() => auth.signOut()}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-full transition-colors"
+                            >
+                                Sign Out
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <Link href="/auth/signin" className="hidden sm:block text-sm font-medium text-gray-300 hover:text-white transition-colors">
+                                Sign In
+                            </Link>
+                            <Link
+                                href="/auth/signup"
+                                className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-full hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] transition-all hover:scale-105"
+                            >
+                                Start Earning
+                            </Link>
+                        </>
+                    )}
                 </div>
             </motion.div>
         </motion.nav>

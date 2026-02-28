@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { auth, db } from '@/lib/firebase'
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword } from 'firebase/auth'
+import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
@@ -23,44 +25,31 @@ export default function SignIn() {
     const devEmail = 'dev@clawsup.fun'
     const devPassword = 'devtest123'
 
-    // Try sign in first
-    let { error: signInErr } = await supabase.auth.signInWithPassword({
-      email: devEmail,
-      password: devPassword,
-    })
+    try {
+      // Try sign in first
+      await signInWithEmailAndPassword(auth, devEmail, devPassword)
+      router.push('/events')
+    } catch (signInErr: any) {
+      // If user doesn't exist, create it
+      if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, devEmail, devPassword)
 
-    if (signInErr) {
-      // Account doesn't exist — create it
-      const { data, error: signUpErr } = await supabase.auth.signUp({
-        email: devEmail,
-        password: devPassword,
-        options: { data: { full_name: 'Dev Tester' } },
-      })
-      if (signUpErr) {
-        setError(signUpErr.message)
+          await setDoc(doc(db, 'users', userCredential.user.uid), {
+            email: devEmail,
+            full_name: 'Dev Tester',
+          }, { merge: true })
+
+          router.push('/events')
+        } catch (signUpErr: any) {
+          setError(signUpErr.message)
+          setDevLoading(false)
+        }
+      } else {
+        setError(signInErr.message)
         setDevLoading(false)
-        return
-      }
-      if (data.user) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          email: devEmail,
-          full_name: 'Dev Tester',
-        }, { onConflict: 'id' })
-      }
-      // Try signing in again after signup
-      const { error: retryErr } = await supabase.auth.signInWithPassword({
-        email: devEmail,
-        password: devPassword,
-      })
-      if (retryErr) {
-        setError('Account created but auto-login failed: ' + retryErr.message)
-        setDevLoading(false)
-        return
       }
     }
-
-    router.push('/events')
   }
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -68,16 +57,12 @@ export default function SignIn() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
       router.push('/events')
+    } catch (err: any) {
+      setError(err.message)
+      setLoading(false)
     }
   }
 
@@ -87,24 +72,23 @@ export default function SignIn() {
     setError('')
 
     try {
-      console.log('🔵 Calling Supabase OAuth...')
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
 
-      console.log('🔵 OAuth response:', { data, error })
-
-      if (error) {
-        console.error('❌ OAuth error:', error)
-        setError(error.message)
-        setGoogleLoading(false)
+      // Upsert profile in Firestore if it's their first time
+      const userRef = doc(db, 'users', result.user.uid)
+      const userSnap = await getDoc(userRef)
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          email: result.user.email,
+          full_name: result.user.displayName || 'Google User'
+        })
       }
-    } catch (err) {
+
+      router.push('/events')
+    } catch (err: any) {
       console.error('❌ Exception:', err)
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      setError(err.message || 'Unknown error')
       setGoogleLoading(false)
     }
   }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { nanoid } from 'nanoid'
 
 // Google Photos album scraper — no API key required
@@ -57,13 +57,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Ensure the event exists
-    const { data: event } = await supabaseAdmin
-        .from('events')
-        .select('id')
-        .eq('id', eventId)
-        .single()
+    const eventDoc = await adminDb.collection('events').doc(eventId).get();
 
-    if (!event) {
+    if (!eventDoc.exists) {
         return Response.json({ error: 'Event not found' }, { status: 404 })
     }
 
@@ -91,13 +87,9 @@ export async function POST(request: NextRequest) {
                 send({ type: 'status', message: `Found ${images.length} images. Starting import…`, total: images.length })
 
                 // Cache the event creator before the loop
-                const { data: eventData } = await supabaseAdmin
-                    .from('events')
-                    .select('created_by')
-                    .eq('id', eventId)
-                    .single()
-
-                const uploaderId = eventData?.created_by
+                const eventRef = adminDb.collection('events').doc(eventId);
+                const eventSnap = await eventRef.get();
+                const uploaderId = eventSnap.exists ? eventSnap.data()?.created_by : null;
 
                 let imported = 0
                 let failed = 0
@@ -115,31 +107,32 @@ export async function POST(request: NextRequest) {
                         const buffer = await imgResponse.arrayBuffer()
                         const fileId = nanoid()
                         const ext = mimeForUrl(img.url) === 'video/mp4' ? 'mp4' : 'jpg'
-                        const storagePath = `${eventId}/${fileId}.${ext}`
+                        const storagePath = `events/${eventId}/${fileId}.${ext}`
 
-                        // Upload to Supabase Storage
-                        const { error: uploadError } = await supabaseAdmin.storage
-                            .from('event-uploads')
-                            .upload(storagePath, buffer, {
+                        // Upload to Firebase Storage
+                        const bucket = adminStorage.bucket();
+                        const file = bucket.file(storagePath);
+
+                        await file.save(Buffer.from(buffer), {
+                            metadata: {
                                 contentType: mimeForUrl(img.url),
-                                upsert: false,
-                            })
+                            },
+                        });
 
-                        if (uploadError) throw uploadError
+                        // Make the file public to get a permanent URL
+                        await file.makePublic();
+                        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 
-                        // Build the public URL
-                        const { data: urlData } = supabaseAdmin.storage
-                            .from('event-uploads')
-                            .getPublicUrl(storagePath)
-
-                        await supabaseAdmin.from('uploads').insert({
+                        // Insert to Firestore
+                        await adminDb.collection('uploads').add({
                             event_id: eventId,
                             uploaded_by: uploaderId,
                             file_type: ext === 'mp4' ? 'video' : 'photo',
-                            file_url: urlData.publicUrl,
+                            file_url: publicUrl,
                             file_size: buffer.byteLength,
                             width: img.width,
                             height: img.height,
+                            created_at: new Date().toISOString(),
                             metadata: {
                                 source: 'google-photos-import',
                                 original_uid: img.uid,
