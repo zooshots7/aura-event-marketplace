@@ -24,9 +24,27 @@ function isValidAlbumUrl(url: string): boolean {
     }
 }
 
+/**
+ * Resolve a Google Photos URL to its full form.
+ * Short links (photos.app.goo.gl) redirect to the full photos.google.com URL.
+ * For photos.google.com URLs, ensure the link has the key query param.
+ */
+async function resolveAlbumUrl(url: string): Promise<string> {
+    // If it's a short link, follow redirects to get the full URL
+    if (url.includes('photos.app.goo.gl')) {
+        const res = await fetch(url, {
+            method: 'HEAD',
+            redirect: 'follow',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            },
+        })
+        return res.url
+    }
+    return url
+}
+
 function mimeForUrl(url: string): string {
-    // Google Photos urls are almost always JPEG; if the url contains
-    // "=m18" or similar motion-photo/video indicators treat as video.
     if (/=m(18|37)/.test(url)) return 'video/mp4'
     return 'image/jpeg'
 }
@@ -51,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValidAlbumUrl(albumUrl)) {
         return Response.json(
-            { error: 'Invalid Google Photos album URL' },
+            { error: 'Invalid Google Photos album URL. Please use a photos.app.goo.gl or photos.google.com share link.' },
             { status: 400 },
         )
     }
@@ -73,35 +91,74 @@ export async function POST(request: NextRequest) {
             }
 
             try {
-                // 1. Scrape image URLs from the shared album
-                send({ type: 'status', message: 'Extracting images from album…' })
+                // 1. Resolve short URLs and scrape image URLs
+                send({ type: 'status', message: 'Resolving album link…' })
 
-                const images = await GooglePhotosAlbum.fetchImageUrls(albumUrl)
-
-                if (!images || images.length === 0) {
-                    send({ type: 'error', message: 'No images found in the album. Make sure the link is a public shared album.' })
+                let resolvedUrl: string
+                try {
+                    resolvedUrl = await resolveAlbumUrl(albumUrl)
+                } catch {
+                    send({
+                        type: 'error',
+                        message: 'Failed to resolve the album URL. Please make sure you copied the complete share link including the ?key= parameter.',
+                    })
                     controller.close()
                     return
                 }
 
-                send({ type: 'status', message: `Found ${images.length} images. Starting import…`, total: images.length })
+                send({ type: 'status', message: 'Extracting images from album…' })
 
-                // Cache the event creator before the loop
-                const eventRef = adminDb.collection('events').doc(eventId);
-                const eventSnap = await eventRef.get();
-                const uploaderId = eventSnap.exists ? eventSnap.data()?.created_by : null;
+                let images: Awaited<ReturnType<typeof GooglePhotosAlbum.fetchImageUrls>>
+                try {
+                    images = await GooglePhotosAlbum.fetchImageUrls(resolvedUrl)
+                } catch (scrapeErr: unknown) {
+                    const msg = scrapeErr instanceof Error ? scrapeErr.message : 'Unknown'
+                    if (msg.includes('404')) {
+                        send({
+                            type: 'error',
+                            message: 'Could not access the album (404). Please make sure you copied the COMPLETE share link from Google Photos, including the ?key= parameter at the end. The URL should look like: photos.google.com/share/...?key=...',
+                        })
+                    } else {
+                        send({
+                            type: 'error',
+                            message: `Failed to extract images: ${msg}`,
+                        })
+                    }
+                    controller.close()
+                    return
+                }
+
+                if (!images || images.length === 0) {
+                    send({
+                        type: 'error',
+                        message: 'No images found in the album. Make sure the link is a public shared album with the complete URL including the ?key= parameter.',
+                    })
+                    controller.close()
+                    return
+                }
+
+                send({
+                    type: 'status',
+                    message: `Found ${images.length} images. Starting import…`,
+                    total: images.length,
+                })
+
+                const uploaderId = eventDoc.data()?.created_by || null
 
                 let imported = 0
                 let failed = 0
 
-                // 2. Process each image sequentially to avoid overwhelming
+                // 2. Process each image sequentially
                 for (let i = 0; i < images.length; i++) {
                     const img = images[i]
                     const fullResUrl = `${img.url}=w${img.width}-h${img.height}`
 
                     try {
-                        // Fetch the image bytes
-                        const imgResponse = await fetch(fullResUrl)
+                        const imgResponse = await fetch(fullResUrl, {
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                            },
+                        })
                         if (!imgResponse.ok) throw new Error(`HTTP ${imgResponse.status}`)
 
                         const buffer = await imgResponse.arrayBuffer()
@@ -119,7 +176,7 @@ export async function POST(request: NextRequest) {
                             },
                         });
 
-                        // Make the file public to get a permanent URL
+                        // Make the file public
                         await file.makePublic();
                         const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
 

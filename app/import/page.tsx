@@ -245,10 +245,13 @@ function ImportPageInner() {
                                         type="url"
                                         value={albumUrl}
                                         onChange={e => setAlbumUrl(e.target.value)}
-                                        placeholder="https://photos.app.goo.gl/..."
+                                        placeholder="https://photos.google.com/share/...?key=..."
                                         className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20 transition text-white placeholder:text-gray-600 text-base"
                                         disabled={state === 'loading'}
                                     />
+                                    <p className="text-xs text-gray-500 mt-1.5">
+                                        Paste the full share link including the <code className="text-purple-400">?key=</code> parameter
+                                    </p>
                                 </div>
 
                                 {/* Event Selector */}
