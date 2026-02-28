@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 // ---------------------------------------------------------------------------
 // POST /api/analyze-uploads
-// Runs Google Cloud Vision label detection on un-tagged uploads for an event.
+// Uses Gemini API to analyze images and generate descriptive tags.
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
@@ -16,111 +16,175 @@ export async function POST(request: NextRequest) {
         return Response.json({ error: 'eventId is required' }, { status: 400 })
     }
 
-    // Check credentials
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
-    const visionKey = process.env.GOOGLE_CLOUD_VISION_KEY
+    const geminiKey = process.env.GEMINI_API_KEY
 
-    if (
-        !visionKey ||
-        !projectId ||
-        visionKey === 'your_vision_api_key' ||
-        projectId === 'your_project_id'
-    ) {
-        // Gracefully skip — generate placeholder tags so the UI still works
-        const uploadsSnap = await adminDb.collection('uploads')
-            .where('event_id', '==', eventId)
-            .get();
-
-        const unanalyzedUploads = uploadsSnap.docs.filter(doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0);
-
-        if (unanalyzedUploads.length === 0) {
-            return Response.json({ analyzed: 0, message: 'All uploads already analyzed' })
-        }
-
-        // Generate demo tags based on file type
-        const demoTags: Record<string, string[]> = {
-            photo: ['event', 'people', 'celebration', 'indoor', 'photography'],
-            video: ['event', 'video', 'motion', 'celebration'],
-        }
-
-        let analyzed = 0;
-        const batch = adminDb.batch();
-
-        for (const uploadDoc of unanalyzedUploads) {
-            const upload = uploadDoc.data();
-            const fileType = upload.file_type || 'photo';
-            const baseTags = demoTags[fileType] || demoTags.photo;
-            // Randomly pick 2-4 tags to make filtering interesting
-            const shuffled = [...baseTags].sort(() => 0.5 - Math.random());
-            const tags = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
-
-            batch.update(uploadDoc.ref, { ai_tags: tags });
-            analyzed++;
-        }
-
-        await batch.commit();
-
-        return Response.json({
-            analyzed,
-            message: `Demo tags applied to ${analyzed} uploads. Set real Google Vision credentials for actual AI analysis.`,
-        })
+    if (!geminiKey) {
+        // Fallback: generate demo tags so the UI still works
+        return await applyDemoTags(eventId)
     }
 
-    // ── Real Vision API analysis ───────────────────────────────────────
-    const uploadsSnap = await adminDb.collection('uploads')
-        .where('event_id', '==', eventId)
-        .get();
+    // ── Fetch un-analyzed uploads ────────────────────────────────────────
+    let uploadsSnap
+    try {
+        uploadsSnap = await adminDb.collection('uploads')
+            .where('event_id', '==', eventId)
+            .get()
+    } catch (err: unknown) {
+        console.error('Firebase error:', err)
+        return Response.json({ error: 'Database connection error' }, { status: 500 })
+    }
 
-    const unanalyzedUploads = uploadsSnap.docs.filter(doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0);
+    const unanalyzedUploads = uploadsSnap.docs.filter(
+        doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0
+    )
 
     if (unanalyzedUploads.length === 0) {
         return Response.json({ analyzed: 0, message: 'All uploads already analyzed' })
     }
 
-    const visionEndpoint = `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`
+    // ── Analyze with Gemini ──────────────────────────────────────────────
+    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`
 
     let analyzed = 0
     let failed = 0
 
-    // Batch processing limits depending on scale - doing sequentially for now
     for (const uploadDoc of unanalyzedUploads) {
-        const upload = uploadDoc.data();
+        const upload = uploadDoc.data()
+
+        // Skip videos for now — Gemini works best with images
+        if (upload.file_type === 'video') {
+            const videoTags = ['video', 'event', 'motion', 'recording']
+            await uploadDoc.ref.update({ ai_tags: videoTags })
+            analyzed++
+            continue
+        }
 
         try {
-            const visionBody = {
-                requests: [
-                    {
-                        image: { source: { imageUri: upload.file_url } },
-                        features: [
-                            { type: 'LABEL_DETECTION', maxResults: 10 },
-                        ],
-                    },
-                ],
+            // Fetch the image and convert to base64
+            const imgRes = await fetch(upload.file_url)
+            if (!imgRes.ok) throw new Error(`Failed to fetch image: HTTP ${imgRes.status}`)
+
+            const buffer = await imgRes.arrayBuffer()
+            const base64 = Buffer.from(buffer).toString('base64')
+            const mimeType = imgRes.headers.get('content-type') || 'image/jpeg'
+
+            // Call Gemini API
+            const geminiBody = {
+                contents: [{
+                    parts: [
+                        {
+                            inlineData: {
+                                mimeType,
+                                data: base64,
+                            },
+                        },
+                        {
+                            text: 'Analyze this image and return ONLY a JSON array of 5-10 descriptive tags (lowercase single words or short phrases). Focus on: subjects, actions, setting, mood, colors. Example: ["portrait","smiling","outdoor","sunny","group photo","celebration"]. Return ONLY the JSON array, nothing else.',
+                        },
+                    ],
+                }],
+                generationConfig: {
+                    temperature: 0.2,
+                    maxOutputTokens: 200,
+                },
             }
 
-            const res = await fetch(visionEndpoint, {
+            const res = await fetch(geminiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(visionBody),
+                body: JSON.stringify(geminiBody),
             })
 
             if (!res.ok) {
+                const errBody = await res.text()
+                console.error(`Gemini API error for upload ${uploadDoc.id}:`, errBody)
                 failed++
                 continue
             }
 
             const result = await res.json()
-            const labels =
-                result.responses?.[0]?.labelAnnotations?.map(
-                    (l: { description: string }) => l.description.toLowerCase(),
-                ) || []
+            const textContent = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
 
-            await uploadDoc.ref.update({ ai_tags: labels });
+            // Parse the tags from Gemini's response
+            let tags: string[] = []
+            try {
+                // Extract JSON array from response (handle markdown code blocks)
+                const jsonMatch = textContent.match(/\[[\s\S]*?\]/)
+                if (jsonMatch) {
+                    tags = JSON.parse(jsonMatch[0])
+                        .map((t: string) => t.toLowerCase().trim())
+                        .filter((t: string) => t.length > 0)
+                }
+            } catch {
+                // If parsing fails, split by common delimiters
+                tags = textContent
+                    .replace(/[\[\]"']/g, '')
+                    .split(/[,\n]/)
+                    .map((t: string) => t.toLowerCase().trim())
+                    .filter((t: string) => t.length > 0 && t.length < 30)
+                    .slice(0, 10)
+            }
+
+            if (tags.length === 0) {
+                tags = ['untagged']
+            }
+
+            await uploadDoc.ref.update({ ai_tags: tags })
             analyzed++
-        } catch {
+            console.log(`[analyze] Tagged upload ${uploadDoc.id}: ${tags.join(', ')}`)
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Unknown'
+            console.error(`[analyze] Failed for upload ${uploadDoc.id}:`, message)
             failed++
         }
     }
 
-    return Response.json({ analyzed, failed, total: unanalyzedUploads.length })
+    return Response.json({
+        analyzed,
+        failed,
+        total: unanalyzedUploads.length,
+        message: `Analyzed ${analyzed} uploads with Gemini AI`,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: demo tags when no API key is configured
+// ---------------------------------------------------------------------------
+async function applyDemoTags(eventId: string) {
+    const uploadsSnap = await adminDb.collection('uploads')
+        .where('event_id', '==', eventId)
+        .get()
+
+    const unanalyzed = uploadsSnap.docs.filter(
+        doc => !doc.data().ai_tags || doc.data().ai_tags.length === 0
+    )
+
+    if (unanalyzed.length === 0) {
+        return Response.json({ analyzed: 0, message: 'All uploads already analyzed' })
+    }
+
+    const demoTags: Record<string, string[]> = {
+        photo: ['event', 'people', 'celebration', 'indoor', 'photography'],
+        video: ['event', 'video', 'motion', 'celebration'],
+    }
+
+    let analyzed = 0
+    const batch = adminDb.batch()
+
+    for (const uploadDoc of unanalyzed) {
+        const upload = uploadDoc.data()
+        const fileType = upload.file_type || 'photo'
+        const baseTags = demoTags[fileType] || demoTags.photo
+        const shuffled = [...baseTags].sort(() => 0.5 - Math.random())
+        const tags = shuffled.slice(0, 2 + Math.floor(Math.random() * 3))
+        batch.update(uploadDoc.ref, { ai_tags: tags })
+        analyzed++
+    }
+
+    await batch.commit()
+
+    return Response.json({
+        analyzed,
+        message: `Demo tags applied to ${analyzed} uploads. Set GEMINI_API_KEY for real AI analysis.`,
+    })
 }
