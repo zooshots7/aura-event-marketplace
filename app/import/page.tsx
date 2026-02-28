@@ -15,9 +15,12 @@ import {
     ArrowRight,
     Link2,
     ChevronDown,
+    Upload,
+    X,
 } from 'lucide-react'
 
 type ImportState = 'idle' | 'loading' | 'importing' | 'done' | 'error'
+type ImportTab = 'google' | 'upload'
 
 type ProgressLine = {
     type: 'status' | 'progress' | 'complete' | 'error'
@@ -40,19 +43,23 @@ function ImportPageInner() {
     const [progress, setProgress] = useState({ imported: 0, failed: 0, current: 0, total: 0 })
     const [errorMessage, setErrorMessage] = useState('')
     const abortRef = useRef<AbortController | null>(null)
+    const [activeTab, setActiveTab] = useState<ImportTab>('upload')
+
+    // Upload-specific state
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+    const [isDragging, setIsDragging] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
 
     // Fetch events on mount & auto-select from URL param
     useEffect(() => {
         const fetchEvents = async () => {
             try {
-                // Fetch ALL events from the collection (no composite index needed)
                 const snap = await getDocs(collection(db, 'events'));
                 const allEvents: Event[] = [];
                 snap.forEach(d => allEvents.push({ id: d.id, ...d.data() } as Event));
 
-                // Filter to public events client-side & sort by created_at desc
                 const data = allEvents
-                    .filter(e => e.is_public !== false) // treat missing is_public as true
+                    .filter(e => e.is_public !== false)
                     .sort((a, b) => {
                         const dateA = new Date(a.created_at || 0).getTime()
                         const dateB = new Date(b.created_at || 0).getTime()
@@ -61,7 +68,6 @@ function ImportPageInner() {
 
                 const preselect = searchParams.get('eventId')
 
-                // If the preselected event isn't in the public list, fetch it directly by ID
                 if (preselect && !data.some(e => e.id === preselect)) {
                     try {
                         const eventDoc = await getDoc(doc(db, 'events', preselect));
@@ -84,7 +90,8 @@ function ImportPageInner() {
         fetchEvents()
     }, [searchParams])
 
-    const handleImport = useCallback(async () => {
+    // ── Google Photos Import ──────────────────────────────────────────────
+    const handleGoogleImport = useCallback(async () => {
         if (!albumUrl || !selectedEventId) return
 
         setState('loading')
@@ -119,9 +126,8 @@ function ImportPageInner() {
                 if (done) break
                 buffer += decoder.decode(value, { stream: true })
 
-                // Process each newline-delimited JSON chunk
                 const lines = buffer.split('\n')
-                buffer = lines.pop() || '' // keep partial line in buffer
+                buffer = lines.pop() || ''
 
                 for (const line of lines) {
                     if (!line.trim()) continue
@@ -158,7 +164,6 @@ function ImportPageInner() {
                 }
             }
 
-            // If we finished reading and haven't set done/error yet
             if (state !== 'done' && state !== 'error') {
                 setState('done')
             }
@@ -172,6 +177,80 @@ function ImportPageInner() {
             }
         }
     }, [albumUrl, selectedEventId, state])
+
+    // ── Direct File Upload ────────────────────────────────────────────────
+    const handleFileUpload = useCallback(async () => {
+        if (selectedFiles.length === 0 || !selectedEventId) return
+
+        setState('loading')
+        setStatusMessage('Uploading files…')
+        setProgress({ imported: 0, failed: 0, current: 0, total: selectedFiles.length })
+        setErrorMessage('')
+
+        try {
+            const formData = new FormData()
+            formData.append('eventId', selectedEventId)
+            selectedFiles.forEach(file => formData.append('files', file))
+
+            setState('importing')
+
+            const response = await fetch('/api/upload-photos', {
+                method: 'POST',
+                body: formData,
+            })
+
+            const result = await response.json()
+
+            if (!response.ok) {
+                throw new Error(result.error || `Upload failed: HTTP ${response.status}`)
+            }
+
+            setProgress({
+                imported: result.imported ?? 0,
+                failed: result.failed ?? 0,
+                current: result.total ?? 0,
+                total: result.total ?? 0,
+            })
+            setState('done')
+            setSelectedFiles([])
+        } catch (err: unknown) {
+            setErrorMessage(err instanceof Error ? err.message : 'Upload failed')
+            setState('error')
+        }
+    }, [selectedFiles, selectedEventId])
+
+    // ── Drag & Drop handlers ──────────────────────────────────────────────
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(true)
+    }, [])
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+    }, [])
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const files = Array.from(e.dataTransfer.files).filter(
+            f => f.type.startsWith('image/') || f.type.startsWith('video/')
+        )
+        setSelectedFiles(prev => [...prev, ...files])
+    }, [])
+
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const files = Array.from(e.target.files).filter(
+                f => f.type.startsWith('image/') || f.type.startsWith('video/')
+            )
+            setSelectedFiles(prev => [...prev, ...files])
+        }
+    }, [])
+
+    const removeFile = useCallback((index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+    }, [])
 
     const progressPercent =
         progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0
@@ -214,17 +293,17 @@ function ImportPageInner() {
                         <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-full mb-6 shadow-lg shadow-purple-500/5">
                             <ImagePlus className="w-4 h-4 text-purple-400" />
                             <span className="text-sm font-medium text-purple-200 tracking-wide uppercase">
-                                Google Photos Import
+                                Add Photos
                             </span>
                         </div>
                         <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
-                            Import from{' '}
+                            Add Photos to{' '}
                             <span className="bg-gradient-to-r from-purple-400 via-pink-500 to-blue-500 bg-clip-text text-transparent">
-                                Google Photos
+                                Your Event
                             </span>
                         </h1>
                         <p className="text-lg text-gray-400 max-w-xl mx-auto">
-                            Paste a shared album link and we&apos;ll import every photo at full resolution into your event.
+                            Upload files directly or import from a Google Photos shared album.
                         </p>
                     </div>
 
@@ -235,26 +314,7 @@ function ImportPageInner() {
                         {/* ── IDLE / LOADING FORM ─────────────────────────────── */}
                         {(state === 'idle' || state === 'loading') && (
                             <div className="space-y-6 relative z-10">
-                                {/* Album URL */}
-                                <div>
-                                    <label className="block text-sm font-medium mb-2 text-gray-300">
-                                        <Link2 className="w-4 h-4 inline mr-1.5 -mt-0.5" />
-                                        Shareable Album Link
-                                    </label>
-                                    <input
-                                        type="url"
-                                        value={albumUrl}
-                                        onChange={e => setAlbumUrl(e.target.value)}
-                                        placeholder="https://photos.google.com/share/...?key=..."
-                                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20 transition text-white placeholder:text-gray-600 text-base"
-                                        disabled={state === 'loading'}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1.5">
-                                        Paste the full share link including the <code className="text-purple-400">?key=</code> parameter
-                                    </p>
-                                </div>
-
-                                {/* Event Selector */}
+                                {/* Event Selector (shared) */}
                                 <div>
                                     <label className="block text-sm font-medium mb-2 text-gray-300">
                                         Select Event
@@ -288,24 +348,157 @@ function ImportPageInner() {
                                     )}
                                 </div>
 
-                                {/* Submit */}
-                                <button
-                                    onClick={handleImport}
-                                    disabled={!albumUrl || !selectedEventId || state === 'loading'}
-                                    className="w-full py-4 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl font-bold text-lg hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(168,85,247,0.2)] hover:shadow-[0_0_40px_rgba(168,85,247,0.4)] hover:-translate-y-0.5 flex items-center justify-center gap-3"
-                                >
-                                    {state === 'loading' ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            Connecting…
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ImagePlus className="w-5 h-5" />
-                                            Start Import
-                                        </>
-                                    )}
-                                </button>
+                                {/* Tab Switcher */}
+                                <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+                                    <button
+                                        onClick={() => setActiveTab('upload')}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === 'upload'
+                                                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-white border border-purple-500/30 shadow-lg shadow-purple-500/10'
+                                                : 'text-gray-400 hover:text-gray-200'
+                                            }`}
+                                    >
+                                        <Upload className="w-4 h-4" />
+                                        Upload Files
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('google')}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all ${activeTab === 'google'
+                                                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-white border border-purple-500/30 shadow-lg shadow-purple-500/10'
+                                                : 'text-gray-400 hover:text-gray-200'
+                                            }`}
+                                    >
+                                        <Link2 className="w-4 h-4" />
+                                        Google Photos
+                                    </button>
+                                </div>
+
+                                {/* ── Upload Files Tab ─────────────── */}
+                                {activeTab === 'upload' && (
+                                    <div className="space-y-4">
+                                        {/* Drop Zone */}
+                                        <div
+                                            onDragOver={handleDragOver}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={handleDrop}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className={`relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${isDragging
+                                                    ? 'border-purple-500 bg-purple-500/10 scale-[1.02]'
+                                                    : 'border-white/10 hover:border-purple-500/40 hover:bg-white/[0.02]'
+                                                }`}
+                                        >
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                multiple
+                                                accept="image/*,video/*"
+                                                onChange={handleFileSelect}
+                                                className="hidden"
+                                            />
+                                            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/20 flex items-center justify-center">
+                                                <Upload className={`w-7 h-7 transition-colors ${isDragging ? 'text-purple-400' : 'text-gray-500'}`} />
+                                            </div>
+                                            <p className="text-gray-300 font-medium mb-1">
+                                                {isDragging ? 'Drop files here' : 'Drag & drop photos here'}
+                                            </p>
+                                            <p className="text-sm text-gray-500">
+                                                or <span className="text-purple-400">click to browse</span> • Images & videos
+                                            </p>
+                                        </div>
+
+                                        {/* Selected Files Preview */}
+                                        {selectedFiles.length > 0 && (
+                                            <div className="space-y-2">
+                                                <p className="text-sm text-gray-400">
+                                                    {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected
+                                                    <span className="text-gray-600 ml-2">
+                                                        ({(selectedFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB)
+                                                    </span>
+                                                </p>
+                                                <div className="max-h-40 overflow-y-auto space-y-1 scrollbar-hide">
+                                                    {selectedFiles.map((file, i) => (
+                                                        <div
+                                                            key={`${file.name}-${i}`}
+                                                            className="flex items-center justify-between px-3 py-2 bg-white/5 rounded-lg text-sm"
+                                                        >
+                                                            <span className="text-gray-300 truncate flex-1 mr-2">
+                                                                {file.name}
+                                                            </span>
+                                                            <span className="text-gray-600 text-xs shrink-0 mr-2">
+                                                                {(file.size / 1024 / 1024).toFixed(1)} MB
+                                                            </span>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); removeFile(i) }}
+                                                                className="text-gray-500 hover:text-red-400 transition shrink-0"
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Upload Button */}
+                                        <button
+                                            onClick={handleFileUpload}
+                                            disabled={selectedFiles.length === 0 || !selectedEventId || state === 'loading'}
+                                            className="w-full py-4 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl font-bold text-lg hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(168,85,247,0.2)] hover:shadow-[0_0_40px_rgba(168,85,247,0.4)] hover:-translate-y-0.5 flex items-center justify-center gap-3"
+                                        >
+                                            {state === 'loading' ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    Uploading…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Upload className="w-5 h-5" />
+                                                    Upload {selectedFiles.length > 0 ? `${selectedFiles.length} File${selectedFiles.length !== 1 ? 's' : ''}` : 'Files'}
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* ── Google Photos Tab ─────────────── */}
+                                {activeTab === 'google' && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2 text-gray-300">
+                                                <Link2 className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                                                Shareable Album Link
+                                            </label>
+                                            <input
+                                                type="url"
+                                                value={albumUrl}
+                                                onChange={e => setAlbumUrl(e.target.value)}
+                                                placeholder="https://photos.app.goo.gl/... or https://photos.google.com/share/..."
+                                                className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/20 transition text-white placeholder:text-gray-600 text-base"
+                                                disabled={state === 'loading'}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1.5">
+                                                In Google Photos, open the album → click <strong className="text-gray-400">Share</strong> → <strong className="text-gray-400">Copy link</strong>
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={handleGoogleImport}
+                                            disabled={!albumUrl || !selectedEventId || state === 'loading'}
+                                            className="w-full py-4 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl font-bold text-lg hover:from-purple-600 hover:to-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(168,85,247,0.2)] hover:shadow-[0_0_40px_rgba(168,85,247,0.4)] hover:-translate-y-0.5 flex items-center justify-center gap-3"
+                                        >
+                                            {state === 'loading' ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    Connecting…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ImagePlus className="w-5 h-5" />
+                                                    Import from Google Photos
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -314,47 +507,52 @@ function ImportPageInner() {
                             <div className="space-y-8 relative z-10">
                                 <div className="text-center">
                                     <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto mb-4" />
-                                    <p className="text-lg font-semibold text-white">Importing Photos…</p>
+                                    <p className="text-lg font-semibold text-white">
+                                        {activeTab === 'upload' ? 'Uploading Photos…' : 'Importing Photos…'}
+                                    </p>
                                     <p className="text-sm text-gray-400 mt-1">{statusMessage}</p>
                                 </div>
 
-                                {/* Progress bar */}
-                                <div>
-                                    <div className="flex justify-between text-sm text-gray-400 mb-2">
-                                        <span>
-                                            {progress.current} / {progress.total} processed
-                                        </span>
-                                        <span>{progressPercent}%</span>
-                                    </div>
-                                    <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/10">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_12px_rgba(168,85,247,0.5)]"
-                                            style={{ width: `${progressPercent}%` }}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Stats */}
-                                <div className="flex gap-6 justify-center">
-                                    <div className="flex items-center gap-2 text-sm">
-                                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                                        <span className="text-green-300 font-medium">{progress.imported} imported</span>
-                                    </div>
-                                    {progress.failed > 0 && (
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <XCircle className="w-4 h-4 text-red-400" />
-                                            <span className="text-red-300 font-medium">{progress.failed} failed</span>
+                                {progress.total > 0 && (
+                                    <>
+                                        <div>
+                                            <div className="flex justify-between text-sm text-gray-400 mb-2">
+                                                <span>
+                                                    {progress.current} / {progress.total} processed
+                                                </span>
+                                                <span>{progressPercent}%</span>
+                                            </div>
+                                            <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/10">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500 ease-out shadow-[0_0_12px_rgba(168,85,247,0.5)]"
+                                                    style={{ width: `${progressPercent}%` }}
+                                                />
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
 
-                                {/* Cancel */}
-                                <button
-                                    onClick={() => abortRef.current?.abort()}
-                                    className="w-full py-3 border border-white/10 rounded-xl text-sm text-gray-400 hover:text-white hover:border-white/30 transition"
-                                >
-                                    Cancel Import
-                                </button>
+                                        <div className="flex gap-6 justify-center">
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                                <span className="text-green-300 font-medium">{progress.imported} imported</span>
+                                            </div>
+                                            {progress.failed > 0 && (
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <XCircle className="w-4 h-4 text-red-400" />
+                                                    <span className="text-red-300 font-medium">{progress.failed} failed</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+
+                                {activeTab === 'google' && (
+                                    <button
+                                        onClick={() => abortRef.current?.abort()}
+                                        className="w-full py-3 border border-white/10 rounded-xl text-sm text-gray-400 hover:text-white hover:border-white/30 transition"
+                                    >
+                                        Cancel Import
+                                    </button>
+                                )}
                             </div>
                         )}
 
@@ -365,15 +563,17 @@ function ImportPageInner() {
                                     <div className="w-20 h-20 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-green-500/30">
                                         <CheckCircle2 className="w-10 h-10 text-green-400" />
                                     </div>
-                                    <h2 className="text-2xl font-bold mb-2">Import Complete!</h2>
+                                    <h2 className="text-2xl font-bold mb-2">
+                                        {activeTab === 'upload' ? 'Upload' : 'Import'} Complete!
+                                    </h2>
                                     <p className="text-gray-400">
-                                        Successfully imported <span className="text-white font-semibold">{progress.imported}</span> photo{progress.imported !== 1 ? 's' : ''}
+                                        Successfully added <span className="text-white font-semibold">{progress.imported}</span> photo{progress.imported !== 1 ? 's' : ''}
                                         {progress.failed > 0 && (
                                             <span className="text-red-400"> ({progress.failed} failed)</span>
                                         )}
                                         {selectedEvent && (
                                             <span>
-                                                {' '}into <span className="text-purple-300 font-semibold">{selectedEvent.name}</span>
+                                                {' '}to <span className="text-purple-300 font-semibold">{selectedEvent.name}</span>
                                             </span>
                                         )}
                                         .
@@ -393,11 +593,12 @@ function ImportPageInner() {
                                         onClick={() => {
                                             setState('idle')
                                             setAlbumUrl('')
+                                            setSelectedFiles([])
                                             setProgress({ imported: 0, failed: 0, current: 0, total: 0 })
                                         }}
                                         className="flex-1 py-3 border border-white/10 rounded-xl font-semibold text-gray-300 hover:text-white hover:border-white/30 transition"
                                     >
-                                        Import Another Album
+                                        Add More Photos
                                     </button>
                                 </div>
                             </div>
@@ -410,7 +611,9 @@ function ImportPageInner() {
                                     <div className="w-20 h-20 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-red-500/30">
                                         <XCircle className="w-10 h-10 text-red-400" />
                                     </div>
-                                    <h2 className="text-2xl font-bold mb-2">Import Failed</h2>
+                                    <h2 className="text-2xl font-bold mb-2">
+                                        {activeTab === 'upload' ? 'Upload' : 'Import'} Failed
+                                    </h2>
                                     <p className="text-gray-400">{errorMessage}</p>
                                 </div>
 
