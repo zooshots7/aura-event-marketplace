@@ -25,7 +25,7 @@ Aura solves the problem of scattered event content. Instead of everyone hoarding
 - **Backend:** Firebase (Auth, Firestore DB, Cloud Storage)
 - **AI:** Google Cloud Vision API
 - **Payments:** Razorpay
-- **Deployment:** Railway ([clawsup.fun](https://clawsup.fun))
+- **Deployment:** Vercel ([clawsup.fun](https://clawsup.fun))
 
 ## 🚀 Quick Start
 
@@ -77,13 +77,11 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## 📋 Database Schema
 
-Run `supabase-schema.sql` to create:
+Firestore (NoSQL) collections are auto-created. See `FIRESTORE_SCHEMA.md` for the full structure:
 
-- **profiles** - User accounts
+- **users** - User accounts
 - **events** - Event pages with unique codes
 - **uploads** - Photos/videos with AI tags
-- **downloads** - Purchase history
-- **event_members** - Who can upload to which events
 
 ## 🎨 Design System
 
@@ -137,7 +135,7 @@ Run `supabase-schema.sql` to create:
 2. Integrate Razorpay payments
 3. Build search/filter UI
 4. Create user dashboard
-5. ~~Deploy to Vercel~~ Deployed to Railway at [clawsup.fun](https://clawsup.fun)
+5. ✅ Deployed to Vercel at [clawsup.fun](https://clawsup.fun)
 6. Onboard beta testers
 
 ## 🤝 Contributing
