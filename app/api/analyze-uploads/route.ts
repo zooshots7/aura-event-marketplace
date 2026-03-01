@@ -27,7 +27,8 @@ Rules:
 - Tags must be lowercase single words or short 2-word phrases
 - Focus on: people count (solo/couple/group/crowd), actions (dancing/eating/talking/posing), setting (indoor/outdoor/stage/table), mood (happy/energetic/romantic/candid), lighting (daylight/evening/neon/spotlight), and notable objects
 - Be specific: prefer "group selfie" over "photo", prefer "dance floor" over "event"
-- Do NOT include generic tags like "image" or "photo" or "picture"`
+- Do NOT include generic tags like "image" or "photo" or "picture"
+- CRITICAL: Return ONLY a raw JSON array of strings. Do not use markdown blocks (\`\`\`json). Do not include ANY text before or after the JSON array. Output absolute raw JSON only.`
 
 async function analyzeWithRetry(
     model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>,
@@ -53,23 +54,15 @@ async function analyzeWithRetry(
             // or adds preamble text like "Here are the tags: [...]". Extract just the array.
             const jsonMatch = text.match(/\[[\s\S]*\]/)
             if (jsonMatch) {
-                text = jsonMatch[0]
+                text = jsonMatch[0] // Extract just the [ ... ] part
             }
 
             let parsed: unknown;
             try {
                 parsed = JSON.parse(text)
             } catch (parseErr) {
-                // If parsing fails completely, try to salvage using regex
-                console.warn(`[analyze] JSON parse failed, trying fallback:`, parseErr)
-                const tagsFallback = text
-                    .replace(/[\[\]"']/g, '')
-                    .split(',')
-                    .map((t: string) => t.toLowerCase().trim())
-                    .filter((t: string) => t.length > 0 && t.length < 40)
-                    .slice(0, 10)
-                if (tagsFallback.length > 0) return tagsFallback
-                throw new Error('Could not extract tags')
+                console.warn(`[analyze] JSON parse failed, triggering retry. Text was: ${text.slice(0, 100)}...`)
+                throw new Error('Could not parse JSON array')
             }
 
             if (!Array.isArray(parsed)) {
