@@ -50,11 +50,19 @@ async function analyzeWithRetry(
 
             let text = result.response.text()
 
-            // Gemini sometimes ignores responseMimeType and wraps JSON in markdown blocks
-            // or adds preamble text like "Here are the tags: [...]". Extract just the array.
-            const jsonMatch = text.match(/\[[\s\S]*\]/)
-            if (jsonMatch) {
-                text = jsonMatch[0] // Extract just the [ ... ] part
+            // Extract everything between the first '{' or '[' and the last '}' or ']'
+            const firstBracket = text.search(/[\{\[]/)
+            if (firstBracket !== -1) {
+                let lastBracket = -1
+                for (let i = text.length - 1; i >= 0; i--) {
+                    if (text[i] === '}' || text[i] === ']') {
+                        lastBracket = i
+                        break
+                    }
+                }
+                if (lastBracket !== -1 && lastBracket >= firstBracket) {
+                    text = text.substring(firstBracket, lastBracket + 1)
+                }
             }
 
             let parsed: unknown;
@@ -63,6 +71,11 @@ async function analyzeWithRetry(
             } catch (parseErr) {
                 console.warn(`[analyze] JSON parse failed, triggering retry. Text was: ${text.slice(0, 100)}...`)
                 throw new Error('Could not parse JSON array')
+            }
+
+            // Sometimes the model returns { tags: [...] } instead of [...]
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'tags' in parsed) {
+                parsed = (parsed as { tags: unknown }).tags
             }
 
             if (!Array.isArray(parsed)) {
