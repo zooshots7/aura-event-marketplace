@@ -47,9 +47,38 @@ async function analyzeWithRetry(
                 { text: ANALYSIS_PROMPT },
             ])
 
-            const text = result.response.text()
-            const tags: string[] = JSON.parse(text)
-                .map((t: string) => String(t).toLowerCase().trim())
+            let text = result.response.text()
+
+            // Gemini sometimes ignores responseMimeType and wraps JSON in markdown blocks
+            // or adds preamble text like "Here are the tags: [...]". Extract just the array.
+            const jsonMatch = text.match(/\[[\s\S]*\]/)
+            if (jsonMatch) {
+                text = jsonMatch[0]
+            }
+
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(text)
+            } catch (parseErr) {
+                // If parsing fails completely, try to salvage using regex
+                console.warn(`[analyze] JSON parse failed, trying fallback:`, parseErr)
+                const tagsFallback = text
+                    .replace(/[\[\]"']/g, '')
+                    .split(',')
+                    .map((t: string) => t.toLowerCase().trim())
+                    .filter((t: string) => t.length > 0 && t.length < 40)
+                    .slice(0, 10)
+                if (tagsFallback.length > 0) return tagsFallback
+                throw new Error('Could not extract tags')
+            }
+
+            if (!Array.isArray(parsed)) {
+                // Not an array? Throw to trigger retry
+                throw new Error('Gemini response was not a JSON array')
+            }
+
+            const tags: string[] = parsed
+                .map((t: unknown) => String(t).toLowerCase().trim())
                 .filter((t: string) => t.length > 0 && t.length < 40)
                 .slice(0, 10)
 
